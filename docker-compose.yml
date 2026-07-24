@@ -1,0 +1,150 @@
+services:
+  sqlserver:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    container_name: sqlserver
+    environment:
+      ACCEPT_EULA: "Y"
+      SA_PASSWORD: "YourStrong!Passw0rd123"
+      MSSQL_PID: "Express"
+    ports:
+      - "1433:1433"
+    volumes:
+      - sqlserver_data:/var/opt/mssql
+    healthcheck:
+      test: ["CMD", "/opt/mssql-tools18/bin/sqlcmd", "-S", "localhost", "-U", "sa", "-P", "YourStrong!Passw0rd123", "-C", "-Q", "SELECT 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    networks:
+      - merchant-network
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    container_name: redis
+    command: redis-server --appendonly yes
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - merchant-network
+    restart: unless-stopped
+
+  rabbitmq:
+    image: rabbitmq:3-management-alpine
+    container_name: rabbitmq
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - merchant-network
+    restart: unless-stopped
+
+  seq:
+    image: datalust/seq:latest
+    container_name: seq
+    ports:
+      - "5341:80"
+    environment:
+      ACCEPT_EULA: Y
+      SEQ_FIRSTRUN_ADMINPASSWORD: "12345678"
+      SEQ_FIRSTRUN_ENFORCEPASSWORDCOMPLEXITY: "false"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:80/api"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - merchant-network
+    restart: unless-stopped
+
+  identity-api:
+    build:
+      context: ./Identity.API    # 改为项目根目录
+      dockerfile: Dockerfile      # 指定 Dockerfile 路径
+    environment:
+      - ConnectionStrings__Default=Server=sqlserver,1433;Database=MerchantAdmin;User Id=sa;Password=YourStrong!Passw0rd123;TrustServerCertificate=True;
+    image: identity-api:latest    # 建议加 tag 避免混淆
+    container_name: identity-api
+    ports:                         # 如果需要外部访问，添加端口映射
+      - "5001:8080"                  # 根据实际端口修改
+    healthcheck:  # 添加健康检查覆盖
+      test: ["CMD", "dotnet", "--version"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    depends_on:
+      redis:
+        condition: service_healthy
+      sqlserver:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      seq:
+        condition: service_healthy
+    networks:
+      - merchant-network
+    restart: unless-stopped
+
+  merchant-api:
+    build:
+     context: .                 # 改为项目根目录
+     dockerfile: MerchantAdmin.API/Dockerfile  # 指定 Dockerfile 路径
+    environment:
+      - ConnectionStrings__Default=Server=sqlserver,1433;Database=MerchantAdmin;User Id=sa;Password=YourStrong!Passw0rd123;TrustServerCertificate=True;
+    image: merchant-api:latest     # 建议加 tag
+    container_name: merchant-api
+    ports:                         # 如果需要外部访问
+      - "5002:8080"                  # 根据实际端口修改
+    healthcheck:  # 添加健康检查覆盖
+      test: ["CMD", "dotnet", "--version"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    depends_on:
+      redis:
+        condition: service_healthy
+      sqlserver:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      seq:
+        condition: service_healthy
+    networks:
+      - merchant-network
+    restart: unless-stopped
+
+  nginx:
+    image: nginx
+    container_name: nginx
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf
+    depends_on:
+      merchant-api:
+        condition: service_started
+      identity-api:
+        condition: service_started
+    networks:
+      - merchant-network
+    restart: unless-stopped
+
+networks:
+  merchant-network:
+    driver: bridge
+
+volumes:
+  sqlserver_data:

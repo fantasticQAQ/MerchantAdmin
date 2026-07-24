@@ -1,0 +1,6 @@
+@MerchantAdmin.Api_HostAddress = http://localhost:5243
+
+GET {{MerchantAdmin.Api_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###

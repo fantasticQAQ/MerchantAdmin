@@ -1,0 +1,33 @@
+# ========================================
+# Namespace: merchant
+# ========================================
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: merchant
+---
+# ========================================
+# NetworkPolicy: 允许 merchant namespace 内所有 Pod 互相通信
+# ========================================
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: merchant-allow-internal
+  namespace: merchant
+spec:
+  podSelector: {}
+  ingress:
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          name: merchant
+    - podSelector: {}
+  egress:
+  - to:
+    - namespaceSelector:
+        matchLabels:
+          name: merchant
+    - podSelector: {}
+  policyTypes:
+  - Ingress
+  - Egress

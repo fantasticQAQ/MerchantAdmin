@@ -1,0 +1,78 @@
+# ========================================
+# MerchantAdmin (前端/管理端)
+# ========================================
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: merchantadmin
+  namespace: merchant
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: merchantadmin
+  template:
+    metadata:
+      labels:
+        app: merchantadmin
+    spec:
+      initContainers:
+      - name: wait-for-merchant-api
+        image: busybox:1.36
+        command:
+        - sh
+        - -c
+        - |
+          echo "Waiting for Merchant API..."
+          until nc -z merchant-api 5002; do
+            sleep 2
+          done
+          echo "Merchant API is ready!"
+      - name: wait-for-identity-api
+        image: busybox:1.36
+        command:
+        - sh
+        - -c
+        - |
+          echo "Waiting for Identity API..."
+          until nc -z identity-api 5001; do
+            sleep 2
+          done
+          echo "Identity API is ready!"
+      containers:
+      - name: merchantadmin
+        image: merchantadmin:latest
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 80
+          name: http
+        livenessProbe:
+          httpGet:
+            path: /
+            port: 80
+          initialDelaySeconds: 15
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /
+            port: 80
+          initialDelaySeconds: 5
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 3
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: merchantadmin
+  namespace: merchant
+spec:
+  ports:
+  - port: 80
+    targetPort: 80
+    name: http
+  selector:
+    app: merchantadmin
+  type: ClusterIP

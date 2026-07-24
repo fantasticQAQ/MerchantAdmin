@@ -1,0 +1,85 @@
+# ========================================
+# Nginx Ingress Controller (替代 Docker 里的 nginx 反向代理)
+# ========================================
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: merchant-ingress
+  namespace: merchant
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /
+spec:
+  ingressClassName: nginx
+  rules:
+  # 前端
+  - host: merchant.local
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: merchantadmin
+            port:
+              number: 80
+  # Identity API
+  - host: identity-api.local
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: identity-api
+            port:
+              number: 5001
+  # Merchant API
+  - host: merchant-api.local
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: merchant-api
+            port:
+              number: 5002
+  # Seq 日志
+  - host: seq.local
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: seq
+            port:
+              number: 5341
+  # RabbitMQ 管理后台
+  - host: rabbitmq.local
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: rabbitmq
+            port:
+              number: 15672
+---
+# ========================================
+# 备用：Nginx Service（NodePort 方式，不需要 Ingress Controller 时使用）
+# ========================================
+apiVersion: v1
+kind: Service
+metadata:
+  name: merchant-nginx
+  namespace: merchant
+spec:
+  ports:
+  - port: 80
+    targetPort: 80
+    name: http
+  selector:
+    app: merchantadmin
+  type: NodePort

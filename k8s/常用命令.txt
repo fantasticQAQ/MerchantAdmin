@@ -1,0 +1,26 @@
+代理转发：
+kubectl port-forward -n merchant svc/seq 5341:5341
+停止重启
+kubectl scale deployment merchant-api -n merchant --replicas=0
+查看service的Ip
+kubectl get svc -n merchant
+重新应用yaml文件
+kubectl apply -f 05-secrets.yaml
+查看pods状态
+kubectl get pods -n merchant
+查看pods的日志
+kubectl logs merchant-api-7659d9c4dc-xwlhn -n merchant
+让 K8s 用新镜像重建 Pod
+kubectl rollout restart deployment merchant-api identity-api -n merchant
+# 只删 Pod（Deployment 会立刻重建一个新的）
+kubectl delete pod -l app=merchant-api -n merchant
+# 删 Deployment + 它管的所有 Pod（彻底删掉）
+kubectl delete deployment merchant-api -n merchant
+# 删 Service（如果有的话）
+kubectl delete svc merchant-api -n merchant
+# 1. 重新构建前端镜像（不用缓存）
+docker-compose build --no-cache frontend
+# 2. 启动前端容器
+docker-compose up -d frontend
+下载ingress-nginx
+kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/main/deploy/static/provider/cloud/deploy.yaml

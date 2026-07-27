@@ -141,9 +141,18 @@ builder.Services.AddAuthentication(options =>
 // 5. 授权服务（必须加！）
 builder.Services.AddAuthorization();
 
+builder.Services.AddHealthChecks();
+
 var app = builder.Build();
 
+app.MapHealthChecks("/health").AllowAnonymous();
 
+//多个 Pod 同时启动时可能并发迁移（SQL Server 会锁表，一般不会炸，但会报错）所以放部署文件中
+//using (var scope = app.Services.CreateScope())
+//{
+//    var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+//    db.Database.Migrate();
+//}
 
 // 7. Swagger（开发环境）
 if (app.Environment.IsDevelopment())

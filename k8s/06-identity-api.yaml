@@ -16,52 +16,16 @@ spec:
       labels:
         app: identity-api
     spec:
-      # 等待依赖服务就绪（Init Container 方式）
       initContainers:
-      - name: wait-for-sqlserver
-        image: busybox:1.36
-        command:
-        - sh
-        - -c
-        - |
-          echo "Waiting for SQL Server..."
-          until nc -z sqlserver 1433; do
-            sleep 2
-          done
-          echo "SQL Server is ready!"
-      - name: wait-for-redis
-        image: busybox:1.36
-        command:
-        - sh
-        - -c
-        - |
-          echo "Waiting for Redis..."
-          until nc -z redis 6379; do
-            sleep 2
-          done
-          echo "Redis is ready!"
-      - name: wait-for-rabbitmq
-        image: busybox:1.36
-        command:
-        - sh
-        - -c
-        - |
-          echo "Waiting for RabbitMQ..."
-          until nc -z rabbitmq 5672; do
-            sleep 2
-          done
-          echo "RabbitMQ is ready!"
-      - name: wait-for-seq
-        image: busybox:1.36
-        command:
-        - sh
-        - -c
-        - |
-          echo "Waiting for Seq..."
-          until nc -z seq 5341; do
-            sleep 2
-          done
-          echo "Seq is ready!"
+      - name: db-migrate
+        image: merchant-api:latest
+        command: ["dotnet", "ef", "database", "update"]
+        env:
+        - name: ConnectionStrings__Default
+          valueFrom:
+            secretKeyRef:
+              name: merchant-secrets
+              key: sqlserver-connectionString
       containers:
       - name: identity-api
         image: identity-api:latest
@@ -71,22 +35,25 @@ spec:
           name: http
         env:
         - name: ConnectionStrings__Default
-          value: |
-            Server=sqlserver,1433;
-            Database=MerchantAdmin;
-            User Id=sa;
-            Password=$(SA_PASSWORD);
-            TrustServerCertificate=True;
-        - name: SA_PASSWORD
           valueFrom:
             secretKeyRef:
               name: merchant-secrets
-              key: sqlserver-sa-password
-        - name: Seq__ServerUrl
+              key: sqlserver-connectionString
+        - name: Redis__ConnectionString
           valueFrom:
-            configMapKeyRef:
-              name: merchant-config
-              key: seq-server
+            secretKeyRef:
+              name: merchant-secrets
+              key: redis-connectionString
+        - name: RabbitMQ__HostName
+          valueFrom:
+            secretKeyRef:
+              name: merchant-secrets
+              key: rabbitMQ-hostName
+        - name: Serilog__WriteTo__1__Args__serverUrl
+          valueFrom:
+            secretKeyRef:
+              name: merchant-secrets
+              key: seq-serverUrl
         livenessProbe:
           httpGet:
             path: /health

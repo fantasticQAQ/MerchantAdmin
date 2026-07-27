@@ -12,7 +12,6 @@ spec:
   resources:
     requests:
       storage: 10Gi
-  storageClassName: standard
 ---
 apiVersion: apps/v1
 kind: StatefulSet
@@ -49,16 +48,9 @@ spec:
         livenessProbe:
           exec:
             command:
-            - /opt/mssql-tools18/bin/sqlcmd
-            - -S
-            - localhost
-            - -U
-            - sa
-            - -P
-            - "$(SA_PASSWORD)"
-            - -C
-            - -Q
-            - "SELECT 1"
+            - /bin/sh
+            - -c
+            - /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "${SA_PASSWORD}" -C -Q "SELECT@@VERSION"
           initialDelaySeconds: 30
           periodSeconds: 10
           timeoutSeconds: 5
@@ -66,16 +58,9 @@ spec:
         readinessProbe:
           exec:
             command:
-            - /opt/mssql-tools18/bin/sqlcmd
-            - -S
-            - localhost
-            - -U
-            - sa
-            - -P
-            - "$(SA_PASSWORD)"
-            - -C
-            - -Q
-            - "SELECT 1"
+            - /bin/sh
+            - -c
+            - /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "${SA_PASSWORD}" -C -Q "SELECT@@VERSION"
           initialDelaySeconds: 15
           periodSeconds: 5
           timeoutSeconds: 3

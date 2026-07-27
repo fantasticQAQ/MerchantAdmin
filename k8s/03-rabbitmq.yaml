@@ -58,7 +58,6 @@ spec:
   resources:
     requests:
       storage: 5Gi
-  storageClassName: standard
 ---
 # RabbitMQ Service (AMQP)
 apiVersion: v1

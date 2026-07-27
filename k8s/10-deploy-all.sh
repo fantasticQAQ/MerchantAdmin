@@ -10,6 +10,9 @@ echo "🚀 开始部署 Merchant 平台到 Kubernetes..."
 echo "📦 创建命名空间..."
 kubectl apply -f 00-namespace.yaml
 
+# 1.1 配置
+kubectl apply -f 05-secrets.yaml
+
 # 2. 部署基础服务（有状态服务优先）
 echo "🗄️ 部署 SQL Server..."
 kubectl apply -f 01-sqlserver.yaml
@@ -32,12 +35,9 @@ kubectl wait --for=condition=ready pod -l app=seq -n merchant --timeout=120s
 
 # 3. 部署应用服务
 echo "🔐 部署 Identity API..."
-kubectl apply -f 05-secrets.yaml
 kubectl apply -f 06-identity-api.yaml
-
 echo "🏪 部署 Merchant API..."
 kubectl apply -f 07-merchant-api.yaml
-
 echo "🖥️ 部署 MerchantAdmin 前端..."
 kubectl apply -f 08-merchantadmin.yaml
 

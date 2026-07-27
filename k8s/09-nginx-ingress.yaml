@@ -1,5 +1,5 @@
 # ========================================
-# Nginx Ingress Controller (替代 Docker 里的 nginx 反向代理)
+# Nginx Ingress — 统一入口，路径转发
 # ========================================
 apiVersion: networking.k8s.io/v1
 kind: Ingress
@@ -7,14 +7,20 @@ metadata:
   name: merchant-ingress
   namespace: merchant
   annotations:
-    nginx.ingress.kubernetes.io/rewrite-target: /
+    # 超时设置（给 API 足够时间响应）
+    nginx.ingress.kubernetes.io/proxy-connect-timeout: "10"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "60"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "60"
+    # 禁用 buffer（适合 SPA 前端）
+    nginx.ingress.kubernetes.io/proxy-buffering: "off"
 spec:
   ingressClassName: nginx
   rules:
-  # 前端
+  # ===== 前端（默认入口）=====
   - host: merchant.local
     http:
       paths:
+      # 前端页面和静态资源
       - path: /
         pathType: Prefix
         backend:
@@ -22,29 +28,32 @@ spec:
             name: merchantadmin
             port:
               number: 80
-  # Identity API
-  - host: identity-api.local
+
+  # ===== Merchant API =====
+  - host: merchant.local
     http:
       paths:
-      - path: /
-        pathType: Prefix
-        backend:
-          service:
-            name: identity-api
-            port:
-              number: 5001
-  # Merchant API
-  - host: merchant-api.local
-    http:
-      paths:
-      - path: /
+      - path: /api/merchant
         pathType: Prefix
         backend:
           service:
             name: merchant-api
             port:
               number: 5002
-  # Seq 日志
+
+  # ===== Identity API =====
+  - host: merchant.local
+    http:
+      paths:
+      - path: /api/identity
+        pathType: Prefix
+        backend:
+          service:
+            name: identity-api
+            port:
+              number: 5001
+
+  # ===== Seq 日志 =====
   - host: seq.local
     http:
       paths:
@@ -55,7 +64,8 @@ spec:
             name: seq
             port:
               number: 5341
-  # RabbitMQ 管理后台
+
+  # ===== RabbitMQ 管理后台 =====
   - host: rabbitmq.local
     http:
       paths:
@@ -68,17 +78,18 @@ spec:
               number: 15672
 ---
 # ========================================
-# 备用：Nginx Service（NodePort 方式，不需要 Ingress Controller 时使用）
+# 前端 NodePort Service（方便本地访问）
 # ========================================
 apiVersion: v1
 kind: Service
 metadata:
-  name: merchant-nginx
+  name: merchantadmin-nodeport
   namespace: merchant
 spec:
   ports:
   - port: 80
     targetPort: 80
+    nodePort: 30080
     name: http
   selector:
     app: merchantadmin

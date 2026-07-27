@@ -22,7 +22,6 @@ public class AppDbContext : DbContext, IUnitOfWork
     public AppDbContext(DbContextOptions<AppDbContext> options, IMediator mediator) : base(options)
     {
         _mediator = mediator;
-        System.Diagnostics.Debug.WriteLine("OrderingContext::ctor ->" + GetHashCode());
     }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)

@@ -115,7 +115,19 @@ builder.Services.AddAuthorization();
 // 6. Token 服务
 builder.Services.AddScoped<ITokenService, TokenService>();
 
+builder.Services.AddHealthChecks();
+
 var app = builder.Build();
+
+app.MapHealthChecks("/health").AllowAnonymous();
+
+//多个 Pod 同时启动时可能并发迁移（SQL Server 会锁表，一般不会炸，但会报错） 放部署文件中
+//using (var scope = app.Services.CreateScope())
+//{
+//    var db = scope.ServiceProvider.GetRequiredService<IdentityDbContext>();
+//    db.Database.Migrate();
+//}
+
 app.Use(async (context, next) =>
 {
     Console.WriteLine($"REQ {context.Request.Method} {context.Request.Path} AuthHeader: {context.Request.Headers["Authorization"]}");

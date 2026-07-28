@@ -1,20 +1,22 @@
-# ========== µÚÒ»½×¶Î£º±àÒë ==========
+# ========== ç¬¬ä¸€é˜¶æ®µï¼šç¼–è¯‘ ==========
 FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build
 WORKDIR /src
 
-# ¸´ÖÆÏîÄ¿ÎÄ¼ş£¨×¢ÒâÎÄ¼şÃû´øµãºÅ£©
+# å¤åˆ¶é¡¹ç›®æ–‡ä»¶ï¼ˆæ³¨æ„æ–‡ä»¶åå¸¦ç‚¹å·ï¼‰
 COPY Identity.API/Identity.API.csproj ./Identity.API/
-# »Ö¸´ÒÀÀµ
+# æ¢å¤ä¾èµ–
 RUN dotnet restore ./Identity.API/Identity.API.csproj
 
-# ¸´ÖÆËùÓĞÔ´´úÂë
+# å¤åˆ¶æ‰€æœ‰æºä»£ç 
 COPY Identity.API/ ./Identity.API/
-# ·¢²¼Ö÷ÏîÄ¿
+# å‘å¸ƒä¸»é¡¹ç›®
 WORKDIR /src/Identity.API
 RUN dotnet publish -c Release -o /app/publish
 
-# ========== µÚ¶ş½×¶Î£ºÔËĞĞ ==========
+# ========== ç¬¬äºŒé˜¶æ®µï¼šè¿è¡Œ ==========
 FROM mcr.microsoft.com/dotnet/aspnet:8.0-alpine
+# å…³æ‰å…¨çƒåŒ–ä¸å˜æ¨¡å¼
+ENV DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=false
 WORKDIR /app
 COPY --from=build /app/publish .
 ENTRYPOINT ["dotnet", "Identity.API.dll"]

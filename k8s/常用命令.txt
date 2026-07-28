@@ -1,8 +1,8 @@
 代理转发：
 kubectl port-forward -n merchant svc/sqlserver 1433:1433
+kubectl port-forward -n merchant svc/merchantadmin 80:80
 kubectl port-forward -n merchant svc/merchant-api 5002:5002
 kubectl port-forward -n merchant svc/seq 5341:5341
-
 
 停止重启
 kubectl scale deployment merchant-api -n merchant --replicas=0

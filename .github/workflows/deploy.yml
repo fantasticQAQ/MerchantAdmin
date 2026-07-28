@@ -1,105 +1,51 @@
-name: Build and Deploy
+name: Build, Migrate and Deploy
 
 on:
   push:
     branches: [main]
 
-env:
-  REGISTRY: docker.io
-  IMAGE_PREFIX: your-dockerhub-username
-
 jobs:
-  # ========== 构建镜像 ==========
   build:
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     steps:
     - uses: actions/checkout@v4
 
-    - name: Set up Docker Buildx
-      uses: docker/setup-buildx-action@v3
-
-    - name: Login to Docker Hub
-      uses: docker/login-action@v3
-      with:
-        username: ${{ secrets.DOCKER_USERNAME }}
-        password: ${{ secrets.DOCKER_PASSWORD }}
-
-    # 构建 merchant-api
-    - name: Build and Push merchant-api
-      uses: docker/build-push-action@v5
-      with:
-        context: .
-        file: ./MerchantAdmin.API/Dockerfile
-        push: true
-        tags: ${{ env.IMAGE_PREFIX }}/merchant-api:${{ github.sha }}
-
-    # 构建 identity-api
-    - name: Build and Push identity-api
-      uses: docker/build-push-action@v5
-      with:
-        context: .
-        file: ./IdentityApi/Dockerfile
-        push: true
-        tags: ${{ env.IMAGE_PREFIX }}/identity-api:${{ github.sha }}
-
-    # 构建 frontend
-    - name: Build and Push frontend
-      uses: docker/build-push-action@v5
-      with:
-        context: .
-        file: ./k8s-merchant/Dockerfile.frontend
-        push: true
-        tags: ${{ env.IMAGE_PREFIX }}/merchant-admin-frontend:${{ github.sha }}
-
-  # ========== 数据库迁移 ==========
-  migrate:
-    needs: build
-    runs-on: ubuntu-latest
-    steps:
-    - uses: actions/checkout@v4
-
-    - name: Setup .NET
-      uses: actions/setup-dotnet@v4
-      with:
-        dotnet-version: 8.0.x
-
-    - name: Install dotnet-ef
-      run: dotnet tool install --global dotnet-ef
-
-    - name: Run Migrations
-      env:
-        CONNECTION_STRING: ${{ secrets.DB_CONNECTION_STRING }}
+    - name: Build Images
       run: |
-        dotnet ef database update \
-          --project src/MerchantAdmin.Infrastructure \
-          --startup-project src/MerchantAdmin.API
+        docker build -t merchant-api:${{ github.sha }} -f MerchantAdmin.API/Dockerfile .
+        docker build -t identity-api:${{ github.sha }} -f Identity.API/Dockerfile .
+        docker build -t merchant-admin-frontend:${{ github.sha }} -f MerchantAdmin.Frontend/Dockerfile .
+        docker build -t db-migrator:${{ github.sha }} -f Dockerfile.migrate .
 
-  # ========== 部署到 K8s ==========
+
+
   deploy:
-    needs: [build, migrate]
-    runs-on: ubuntu-latest
+    needs: [build]
+    runs-on: self-hosted
     steps:
     - uses: actions/checkout@v4
 
-    - name: Setup kubectl
-      uses: azure/setup-kubectl@v3
-
-    - name: Configure Kubeconfig
+    - name: Update K8s manifests and Deploy
+      shell: pwsh
       run: |
-        mkdir -p ~/.kube
-        echo "${{ secrets.KUBECONFIG }}" > ~/.kube/config
+        (Get-Content k8s/07-merchant-api.yaml) -replace 'merchant-api:latest', 'merchant-api:${{ github.sha }}' | Set-Content k8s/07-merchant-api.yaml
+        (Get-Content k8s/06-identity-api.yaml) -replace 'identity-api:latest', 'identity-api:${{ github.sha }}' | Set-Content k8s/06-identity-api.yaml
+        (Get-Content k8s/08-merchantadmin.yaml) -replace 'merchant-admin-frontend:latest', 'merchant-admin-frontend:${{ github.sha }}' | Set-Content k8s/08-merchantadmin.yaml
 
-    - name: Update Image Tags and Deploy
-      run: |
-        # 替换镜像标签为本次构建的 commit sha
-        sed -i "s|merchant-api:latest|${{ env.IMAGE_PREFIX }}/merchant-api:${{ github.sha }}|g" k8s/07-merchant-api.yaml
-        sed -i "s|identity-api:latest|${{ env.IMAGE_PREFIX }}/identity-api:${{ github.sha }}|g" k8s/06-identity-api.yaml
-        sed -i "s|merchant-admin-frontend:latest|${{ env.IMAGE_PREFIX }}/merchant-admin-frontend:${{ github.sha }}|g" k8s/08-merchantadmin.yaml
+        # 迁移
+        kubectl apply -f k8s/identity-db-migrate-job.yaml
+        kubectl apply -f k8s/merchant-db-migrate-job.yaml
+        kubectl wait --for=condition=complete job/merchant-db-migrate -n merchant --timeout=60s
+        kubectl wait --for=condition=complete job/identity-db-migrate -n merchant --timeout=60s
+        
+        # 3. 部署应用服务
+        kubectl apply -f k8s/06-identity-api.yaml
+        kubectl apply -f k8s/07-merchant-api.yaml
+        kubectl apply -f k8s/08-merchantadmin.yaml
+        kubectl wait --for=condition=ready pod -l app=identity-api -n merchant --timeout=120s
+        kubectl wait --for=condition=ready pod -l app=merchant-api -n merchant --timeout=120s
+        kubectl wait --for=condition=ready pod -l app=merchantadmin -n merchant --timeout=120s
 
-        # 部署
-        kubectl apply -f k8s/
-
-        # 等待滚动更新完成
-        kubectl rollout status deployment/merchant-api -n merchant
-        kubectl rollout status deployment/identity-api -n merchant
-        kubectl rollout status deployment/merchantadmin -n merchant
+        kubectl rollout restart deployment/merchant-api
+        kubectl rollout restart deployment/identity-api
+        kubectl rollout restart deployment/merchantadmin

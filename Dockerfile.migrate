@@ -1,8 +1,8 @@
-﻿# ========== 第一阶段：编译 ==========
-FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build
+FROM mcr.microsoft.com/dotnet/sdk:8.0
+
 WORKDIR /src
 
-# 复制所有项目的 .csproj 文件（注意点号）
+# ============ Merchant 侧全部 csproj ============
 COPY MerchantAdmin.API/MerchantAdmin.API.csproj ./MerchantAdmin.API/
 COPY MerchantAdmin.Application/MerchantAdmin.Application.csproj ./MerchantAdmin.Application/
 COPY MerchantAdmin.Domain/MerchantAdmin.Domain.csproj ./MerchantAdmin.Domain/
@@ -10,10 +10,16 @@ COPY MerchantAdmin.Infrastructure/MerchantAdmin.Infrastructure.csproj ./Merchant
 COPY EventBus/EventBus.csproj ./EventBus/
 COPY EventBusRabbitMQ/EventBusRabbitMQ.csproj ./EventBusRabbitMQ/
 COPY IntegrationEventLogEF/IntegrationEventLogEF.csproj ./IntegrationEventLogEF/
-# 恢复依赖
-RUN dotnet restore ./MerchantAdmin.API/MerchantAdmin.API.csproj
 
-# 复制所有源代码
+# ============ Identity 侧全部 csproj ============
+COPY Identity.API/Identity.API.csproj ./Identity.API/
+
+# ============ 恢复依赖 ============
+# restore startup-project，它会级联 restore 所有引用的项目
+RUN dotnet restore ./MerchantAdmin.API/MerchantAdmin.API.csproj
+RUN dotnet restore ./Identity.API/Identity.API.csproj
+
+# ============ 复制源码 ============
 COPY MerchantAdmin.API/ ./MerchantAdmin.API/
 COPY MerchantAdmin.Application/ ./MerchantAdmin.Application/
 COPY MerchantAdmin.Domain/ ./MerchantAdmin.Domain/
@@ -21,12 +27,10 @@ COPY MerchantAdmin.Infrastructure/ ./MerchantAdmin.Infrastructure/
 COPY EventBus/ ./EventBus/
 COPY EventBusRabbitMQ/ ./EventBusRabbitMQ/
 COPY IntegrationEventLogEF/ ./IntegrationEventLogEF/
-# 发布主项目
-WORKDIR /src/MerchantAdmin.API
-RUN dotnet publish -c Release -o /app/publish
+COPY Identity.API/ ./Identity.API/
 
-# ========== 第二阶段：运行 ==========
-FROM mcr.microsoft.com/dotnet/aspnet:8.0-alpine
-WORKDIR /app
-COPY --from=build /app/publish .
-ENTRYPOINT ["dotnet", "MerchantAdmin.API.dll"]
+# 安装 dotnet-ef
+RUN dotnet tool install --global dotnet-ef
+ENV PATH="${PATH}:/root/.dotnet/tools"
+
+CMD ["echo", "Ready. Override command in K8s Job."]

@@ -1,7 +1,6 @@
 # ========== 第一阶段：构建 ==========
 FROM node:24.16.0-alpine AS builder
-
-WORKDIR /app
+WORKDIR /app/MerchantAdmin.Frontend
 
 # 复制前端目录的 package 文件
 COPY MerchantAdmin.Frontend/package.json MerchantAdmin.Frontend/package-lock.json ./
@@ -10,7 +9,7 @@ COPY MerchantAdmin.Frontend/package.json MerchantAdmin.Frontend/package-lock.jso
 RUN npm ci --registry=https://registry.npmmirror.com
 
 # 复制前端目录的所有源码
-COPY MerchantAdmin.Frontend/ ./
+COPY MerchantAdmin.Frontend/ .
 
 # 构建（只跑 vite build，跳过 type-check）
 RUN npm run build-only
@@ -25,7 +24,7 @@ RUN rm -f /etc/nginx/conf.d/default.conf
 COPY nginx.conf /etc/nginx/nginx.conf
 
 # 复制构建产物
-COPY --from=builder /app/dist /usr/share/nginx/html
+COPY --from=builder /app/MerchantAdmin.Frontend/dist /usr/share/nginx/html
 
 EXPOSE 80
 

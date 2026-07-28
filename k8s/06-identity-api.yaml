@@ -16,16 +16,6 @@ spec:
       labels:
         app: identity-api
     spec:
-      initContainers:
-      - name: db-migrate
-        image: merchant-api:latest
-        command: ["dotnet", "ef", "database", "update"]
-        env:
-        - name: ConnectionStrings__Default
-          valueFrom:
-            secretKeyRef:
-              name: merchant-secrets
-              key: sqlserver-connectionString
       containers:
       - name: identity-api
         image: identity-api:latest

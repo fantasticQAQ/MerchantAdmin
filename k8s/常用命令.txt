@@ -1,15 +1,24 @@
 代理转发：
+kubectl port-forward -n merchant svc/sqlserver 1433:1433
+kubectl port-forward -n merchant svc/merchant-api 5002:5002
 kubectl port-forward -n merchant svc/seq 5341:5341
+
+
 停止重启
 kubectl scale deployment merchant-api -n merchant --replicas=0
 查看service的Ip
 kubectl get svc -n merchant
+
 重新应用yaml文件
 kubectl apply -f 05-secrets.yaml
+kubectl apply -f 07-merchant-api.yaml
+重启pod
+kubectl rollout restart deployment/merchant-api -n merchant
+
 查看pods状态
 kubectl get pods -n merchant
 查看pods的日志
-kubectl logs merchant-api-7659d9c4dc-xwlhn -n merchant
+kubectl logs identity-api-dbcd7bb65-nk5pg -n merchant
 让 K8s 用新镜像重建 Pod
 kubectl rollout restart deployment merchant-api identity-api -n merchant
 # 只删 Pod（Deployment 会立刻重建一个新的）
@@ -24,3 +33,36 @@ docker-compose build --no-cache frontend
 docker-compose up -d frontend
 下载ingress-nginx
 kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/main/deploy/static/provider/cloud/deploy.yaml
+
+只重新构建并启动 merchant-api
+docker compose up -d --build merchant-api
+docker compose up --build db-migrator
+
+只重新构建并运行迁移（migrator）
+docker compose up -d --build merchant-api db-migrator
+
+# 第一步：只跑迁移（等它们成功退出）
+docker compose --profile migrate up --build merchant-migrator identity-migrator
+# 这个是后台
+docker compose --profile migrate up -d --build merchant-migrator identity-migrator
+# 第二步：启动所有服务
+docker compose up -d
+
+改了代码想重新部署 只重新构建并启动 API（不跑迁移）
+docker compose up -d --build merchant-api identity-api
+改了实体/加了 Migration 文件后 重新构建 migrator 镜像并跑迁移
+docker compose --profile migrate up --build merchant-migrator
+
+# 看迁移日志
+docker compose --profile migrate logs merchant-migrator
+docker compose --profile migrate logs identity-migrator
+# 看某个服务日志
+docker compose logs -f merchant-api
+
+停止全部
+docker compose down
+停止并删数据卷
+docker compose down -v
+
+
+kubectl scale deployment ingress-nginx-controller -n ingress-nginx --replicas=0

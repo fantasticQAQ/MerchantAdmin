@@ -1,4 +1,13 @@
+.git
+.gitignore
+README.md
+.vs
+.vscode
 **/bin/
 **/obj/
-**/.vs/
-.git/
+**/node_modules/
+**/*.user
+**/*.suo
+k8s
+Dockerfile*
+docker-compose*

@@ -33,6 +33,12 @@ kubectl wait --for=condition=ready pod -l app=redis -n merchant --timeout=120s
 kubectl wait --for=condition=ready pod -l app=rabbitmq -n merchant --timeout=120s
 kubectl wait --for=condition=ready pod -l app=seq -n merchant --timeout=120s
 
+echo "迁移"
+kubectl apply -f identity-db-migrate-job.yaml
+kubectl apply -f merchant-db-migrate-job.yaml
+kubectl wait --for=condition=complete job/merchant-db-migrate -n merchant --timeout=60s
+kubectl wait --for=condition=complete job/identity-db-migrate -n merchant --timeout=60s
+
 # 3. 部署应用服务
 echo "🔐 部署 Identity API..."
 kubectl apply -f 06-identity-api.yaml

@@ -31,6 +31,10 @@ kubectl delete -f 02-redis.yaml --ignore-not-found=true
 echo "🗑️ 删除 SQL Server..."
 kubectl delete -f 01-sqlserver.yaml --ignore-not-found=true
 
+echo "🗑️ 删除 迁移..."
+kubectl delete job merchant-db-migrate -n merchant
+kubectl delete job identity-db-migrate -n merchant
+
 echo "🗑️ 删除命名空间（会清理剩余资源）..."
 kubectl delete -f 00-namespace.yaml --ignore-not-found=true
 

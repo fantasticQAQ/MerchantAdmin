@@ -70,20 +70,20 @@ services:
 
   identity-api:
     build:
-      context: ./Identity.API    # 改为项目根目录
-      dockerfile: Dockerfile      # 指定 Dockerfile 路径
+      context: .    # 改为项目根目录
+      dockerfile: Identity.API/Dockerfile      # 指定 Dockerfile 路径
     environment:
       - ConnectionStrings__Default=Server=sqlserver,1433;Database=MerchantAdmin;User Id=sa;Password=P@ssw0rd2024!;TrustServerCertificate=True;
     image: identity-api:latest    # 建议加 tag 避免混淆
     container_name: identity-api
     ports:                         # 如果需要外部访问，添加端口映射
       - "5001:8080"                  # 根据实际端口修改
-    healthcheck:  # 添加健康检查覆盖
-      test: ["CMD", "dotnet", "--version"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 10s
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
     depends_on:
       redis:
         condition: service_healthy
@@ -107,12 +107,12 @@ services:
     container_name: merchant-api
     ports:                         # 如果需要外部访问
       - "5002:8080"                  # 根据实际端口修改
-    healthcheck:  # 添加健康检查覆盖
-      test: ["CMD", "dotnet", "--version"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 10s
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
     depends_on:
       redis:
         condition: service_healthy
@@ -158,6 +158,56 @@ services:
     networks:
       - merchant-network
     restart: unless-stopped
+    
+  db-migrator:
+    build:
+      context: .
+      dockerfile: Dockerfile.migrate
+    image: db-migrator:latest
+    container_name: db-migrator
+    environment:
+      - ConnectionStrings__Default=Server=sqlserver,1433;Database=MerchantAdmin;User Id=sa;Password=P@ssw0rd2024!;TrustServerCertificate=True;
+    depends_on:
+      sqlserver:
+        condition: service_healthy
+    networks:
+      - merchant-network
+    profiles:
+      - migrate
+      
+  merchant-migrator:
+    build:
+      context: .
+      dockerfile: Dockerfile.migrate
+    image: db-migrator:latest
+    container_name: merchant-migrator
+    command: ["dotnet", "ef", "database", "update", "--project", "MerchantAdmin.Infrastructure/MerchantAdmin.Infrastructure.csproj", "--startup-project", "MerchantAdmin.API/MerchantAdmin.API.csproj"]
+    environment:
+      - ConnectionStrings__Default=Server=sqlserver,1433;Database=MerchantAdmin;User Id=sa;Password=P@ssw0rd2024!;TrustServerCertificate=True;
+    depends_on:
+      sqlserver:
+        condition: service_healthy
+    networks:
+      - merchant-network
+    profiles:
+      - migrate
+
+  identity-migrator:
+    build:
+      context: .
+      dockerfile: Dockerfile.migrate
+    image: db-migrator:latest
+    container_name: identity-migrator
+    command: ["dotnet", "ef", "database", "update", "--project", "Identity.API/Identity.API.csproj", "--startup-project", "Identity.API/Identity.API.csproj"]
+    environment:
+      - ConnectionStrings__Default=Server=sqlserver,1433;Database=MerchantAdmin;User Id=sa;Password=P@ssw0rd2024!;TrustServerCertificate=True;
+    depends_on:
+      sqlserver:
+        condition: service_healthy
+    networks:
+      - merchant-network
+    profiles:
+      - migrate
 
 networks:
   merchant-network:

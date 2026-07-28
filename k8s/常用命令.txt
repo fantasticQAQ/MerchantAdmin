@@ -18,7 +18,7 @@ kubectl rollout restart deployment/merchant-api -n merchant
 查看pods状态
 kubectl get pods -n merchant
 查看pods的日志
-kubectl logs identity-api-dbcd7bb65-nk5pg -n merchant
+kubectl logs merchant-api-548968fc87-82cj7 -n merchant
 让 K8s 用新镜像重建 Pod
 kubectl rollout restart deployment merchant-api identity-api -n merchant
 # 只删 Pod（Deployment 会立刻重建一个新的）

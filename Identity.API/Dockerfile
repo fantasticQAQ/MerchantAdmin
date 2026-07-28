@@ -14,9 +14,7 @@ WORKDIR /src/Identity.API
 RUN dotnet publish -c Release -o /app/publish
 
 # ========== 第二阶段：运行 ==========
-FROM mcr.microsoft.com/dotnet/aspnet:8.0-alpine
-# 关掉全球化不变模式
-ENV DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=false
+FROM mcr.microsoft.com/dotnet/aspnet:8.0
 WORKDIR /app
 COPY --from=build /app/publish .
 ENTRYPOINT ["dotnet", "Identity.API.dll"]

@@ -54,11 +54,21 @@ jobs:
 
         # 清理旧镜像，每个服务保留当前版本 + 1个旧版本
         $services = @("merchant-api", "identity-api", "merchant-admin-frontend", "db-migrator")
+
         foreach ($svc in $services) {
-            $tags = docker images --format "{{.Tag}}" $svc | Where-Object { $_ -ne "<none>" -and $_ -ne "" } | Sort-Object { docker inspect "${svc}:${_}" --format '{{.Created}}' } -Descending
-            $toDelete = $tags | Where-Object { $_ -ne "${{ github.sha }}" } | Select-Object -Skip 1
-            foreach ($tag in $toDelete) {
-                docker rmi "${svc}:${tag}"
+            # 获取该服务所有 Image ID，按创建时间倒序，去重
+            $imageIds = docker images --format "{{.ID}}" $svc | Get-Unique
+            
+            # 按创建时间排序（需要 inspect 拿 Created）
+            $sortedIds = $imageIds | Sort-Object {
+                docker inspect $_ --format '{{.Created}}'
+            } -Descending
+            
+            # 保留最近 2 个 Image ID，其余全删
+            $toDelete = $sortedIds | Select-Object -Skip 2
+            
+            foreach ($id in $toDelete) {
+                docker rmi $id
             }
         }
         

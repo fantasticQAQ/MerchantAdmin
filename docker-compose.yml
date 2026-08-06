@@ -187,6 +187,8 @@ services:
     depends_on:
       sqlserver:
         condition: service_healthy
+      db-migrator:
+        condition: service_completed_successfully
     networks:
       - merchant-network
     profiles:
@@ -204,6 +206,8 @@ services:
     depends_on:
       sqlserver:
         condition: service_healthy
+      db-migrator:
+        condition: service_completed_successfully
     networks:
       - merchant-network
     profiles:

@@ -1,3 +1,15 @@
+### 导出镜像
+docker save datalust/seq:latest -o F:\Docker\seq.tar
+传输镜像
+scp F:\Docker\sqlserver.tar ubuntu@你的IP:/home/ubuntu/
+###  导入镜像
+docker load < sqlserver.tar
+
+# 临时用社区代理拉（不改 daemon）
+docker pull mcr.dockerproxy.com/mssql/server:2019-latest
+# 拉完改 tag
+docker tag mcr.dockerproxy.com/mssql/server:2019-latest mcr.microsoft.com/msssql/server:2019-latest
+
 代理转发：
 kubectl port-forward -n merchant svc/sqlserver 1433:1433
 kubectl port-forward -n merchant svc/merchantadmin 80:80
@@ -38,20 +50,14 @@ kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/main
 docker compose up -d --build merchant-api
 docker compose up --build db-migrator
 
-只重新构建并运行迁移（migrator）
-docker compose up -d --build merchant-api db-migrator
-
-# 第一步：只跑迁移（等它们成功退出）
-docker compose --profile migrate up --build merchant-migrator identity-migrator
-# 这个是后台
-docker compose --profile migrate up -d --build merchant-migrator identity-migrator
-# 第二步：启动所有服务
-docker compose up -d
-
-改了代码想重新部署 只重新构建并启动 API（不跑迁移）
-docker compose up -d --build merchant-api identity-api
-改了实体/加了 Migration 文件后 重新构建 migrator 镜像并跑迁移
-docker compose --profile migrate up --build merchant-migrator
+# 1. 构建
+docker compose build
+# 2. 基础设施
+docker compose up -d sqlserver redis rabbitmq seq
+# 3. 迁移（一次性）
+docker compose run --rm db-migrator
+# 4. 业务服务
+docker compose up -d identity-api merchant-api frontend
 
 # 看迁移日志
 docker compose --profile migrate logs merchant-migrator

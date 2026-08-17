@@ -47,21 +47,21 @@ docker-compose up -d frontend
 下载ingress-nginx
 kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/main/deploy/static/provider/cloud/deploy.yaml
 
-# ① 彻底删除数据库（停全部服务 + 删数据卷：sqlserver 数据、Redis/Seq 数据一并清空）
-docker compose -f docker-compose.yml down -v
+#1、彻底删除数据库（停全部服务 + 删数据卷：sqlserver 数据、Redis/Seq 数据一并清空）
+docker compose down -v
 
-# ② 重建 identity-api 镜像（种子代码已改，必须重新构建才生效）
-docker compose -f docker-compose.yml build identity-api
+#2、构建所有镜像
+docker compose build
 
-# ③ 只起基础设施，等 sqlserver 健康
-docker compose -f docker-compose.yml up -d sqlserver redis rabbitmq seq
+#3、只起基础设施，等 sqlserver 健康
+docker compose up -d sqlserver redis rabbitmq seq
 
-# ④ 迁移（EF 会自动建库；若报 "network not found"，先执行下面一行清理残留再重跑）
-docker compose -f docker-compose.yml --profile migrate run --rm merchant-migrator
-docker compose -f docker-compose.yml --profile migrate run --rm identity-migrator
+#4、迁移
+docker compose --profile migrate run --rm merchant-migrator
+docker compose --profile migrate run --rm identity-migrator
 
-# ⑤ 起全部服务（identity-api 启动时自动执行种子 → 三个角色 + admin/123456 超管）
-docker compose -f docker-compose.yml up -d
+#5、起全部服务
+docker compose up -d
 
 
 # 看迁移日志

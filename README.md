@@ -76,11 +76,21 @@ dotnet test MerchantAdmin.UnitTests
 基础设施：SQL Server、Redis、RabbitMQ、Seq 日志。
 
 ```bash
-# 1. 首次部署：数据库迁移 + 初始化种子数据（角色 + admin 超管）
-docker compose -f docker-compose.yml --profile migrate up -d
+#1、彻底删除数据库（停全部服务 + 删数据卷：sqlserver 数据、Redis/Seq 数据一并清空）
+docker compose down -v
 
-# 2. 启动全部服务
-docker compose -f docker-compose.yml up -d
+#2、构建所有镜像
+docker compose build
+
+#3、只起基础设施，等 sqlserver 健康
+docker compose up -d sqlserver redis rabbitmq seq
+
+#4、迁移
+docker compose --profile migrate run --rm merchant-migrator
+docker compose --profile migrate run --rm identity-migrator
+
+#5、起全部服务
+docker compose up -d
 ```
 
 **对外入口（唯一端口）：`http://localhost:8080`**——nginx 统一反向代理，前端静态资源 + 三个后端服务的 API 都在此入口，后端容器不暴露到宿主。

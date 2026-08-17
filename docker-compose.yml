@@ -240,6 +240,7 @@ services:
 
 networks:
   merchant-network:
+    name: merchant-network
     driver: bridge
 
 volumes:

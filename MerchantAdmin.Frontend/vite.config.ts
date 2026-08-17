@@ -23,15 +23,17 @@ export default defineConfig({
   server: {
     port: 5173,  // 开发服务器端口
     proxy: {
-      '/api': {
-        target: 'http://localhost',  // Nginx 地址
+      // 身份认证服务（本地开发直连，生产走 nginx）
+      '/api/identity': {
+        target: 'http://localhost:5034',
         changeOrigin: true,
-        // 可选：查看代理日志
-        configure: (proxy) => {
-          proxy.on('proxyReq', (proxyReq, req, res) => {
-            console.log('[Proxy]', req.method, req.url, '→', 'http://localhost');
-          });
-        }
+        rewrite: (path) => path.replace(/^\/api\/identity/, '/api')
+      },
+      // 订单/商品服务（本地开发直连，生产走 nginx）
+      '/api/merchant': {
+        target: 'http://localhost:5243',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api\/merchant/, '/api')
       }
     }
   },

@@ -1,7 +1,7 @@
 ﻿using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
-namespace IdentityService.WebAPI.Controllers
+namespace Identity.API.Controllers
 {
     [ApiController]
     [Route("api/[controller]")]

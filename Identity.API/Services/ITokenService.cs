@@ -1,9 +1,9 @@
-﻿using IdentityService.WebAPI.Entities;
+﻿using Identity.API.Entities;
 
-namespace IdentityService.WebAPI.Services
+namespace Identity.API.Services
 {
     public interface ITokenService
     {
-        string CreateToken(ApplicationUser user);
+        Task<string> CreateToken(ApplicationUser user);
     }
 }

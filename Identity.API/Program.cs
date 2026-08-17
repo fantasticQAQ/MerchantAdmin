@@ -1,11 +1,13 @@
-﻿using IdentityService.WebAPI;
-using IdentityService.WebAPI.Entities;
-using IdentityService.WebAPI.Services;
+﻿using Identity.API.Entities;
+using Identity.API;
+using Identity.API.Entities;
+using Identity.API.Services;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
+using System.Security.Claims;
 using System.Text;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -50,8 +52,9 @@ builder.Services.AddDbContext<IdentityDbContext>(opt =>
     opt.UseSqlServer(builder.Configuration.GetConnectionString("Default")));
 
 // 3. Identity（用户管理）
-builder.Services.AddIdentity<ApplicationUser, IdentityRole<long>>()
-    .AddEntityFrameworkStores<IdentityDbContext>();
+builder.Services.AddIdentity<ApplicationUser, ApplicationRole>()
+    .AddEntityFrameworkStores<IdentityDbContext>()
+    .AddDefaultTokenProviders();
 
 // ✅ 配置密码规则
 builder.Services.Configure<IdentityOptions>(options =>
@@ -90,10 +93,23 @@ builder.Services.AddAuthentication(options =>
             Console.WriteLine("❌ JWT 校验失败：" + context.Exception.Message);
             return Task.CompletedTask;
         },
-        OnTokenValidated = context =>
+        OnTokenValidated = async context =>
         {
+            // 校验 SecurityStamp：用户改密码等安全凭证变更后，旧 token 立即失效
+            var userId = context.Principal?.FindFirstValue(ClaimTypes.NameIdentifier);
+            var securityStamp = context.Principal?.FindFirstValue("securityStamp");
+            if (userId != null)
+            {
+                using var scope = context.HttpContext.RequestServices.CreateScope();
+                var userManager = scope.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>();
+                var user = await userManager.FindByIdAsync(userId);
+                if (user is null || user.SecurityStamp != securityStamp)
+                {
+                    context.Fail("安全凭证已变更，请重新登录");
+                    return;
+                }
+            }
             Console.WriteLine("✅ JWT 校验成功");
-            return Task.CompletedTask;
         }
     };
 
@@ -121,6 +137,34 @@ var app = builder.Build();
 
 app.MapHealthChecks("/health").AllowAnonymous();
 
+// 初始化角色与管理员（种子数据）
+using (var scope = app.Services.CreateScope())
+{
+    var roleManager = scope.ServiceProvider.GetRequiredService<RoleManager<ApplicationRole>>();
+    var userManager = scope.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>();
+
+    foreach (var roleName in new[] { "SuperAdmin", "Admin", "Operator" })
+    {
+        var role = await roleManager.FindByNameAsync(roleName);
+        if (role is null)
+        {
+            await roleManager.CreateAsync(new ApplicationRole(roleName) { IsActive = true });
+        }
+    }
+
+    var admin = await userManager.FindByNameAsync("admin");
+    if (admin is null)
+    {
+        admin = new ApplicationUser("admin", "admin@qq.com");
+        var createResult = await userManager.CreateAsync(admin, "123456");
+        Console.WriteLine($"[SEED] CreateAsync Succeeded={createResult.Succeeded} Errors={string.Join(";", createResult.Errors.Select(e => e.Description))}");
+        if (createResult.Succeeded)
+        {
+            await userManager.AddToRoleAsync(admin, "SuperAdmin");
+        }
+    }
+}
+
 //多个 Pod 同时启动时可能并发迁移（SQL Server 会锁表，一般不会炸，但会报错） 放部署文件中
 //using (var scope = app.Services.CreateScope())
 //{
@@ -134,13 +178,8 @@ app.Use(async (context, next) =>
     await next();
 });
 
-// 7. Swagger（开发环境）
+// 7. Swagger（仅开发环境启用，生产关闭避免泄露接口）
 if (app.Environment.IsDevelopment())
-{
-    app.UseSwagger();
-    app.UseSwaggerUI();
-}
-else
 {
     app.UseSwagger();
     app.UseSwaggerUI();

@@ -1,4 +1,4 @@
-﻿using MerchantAdmin.EventBus.Events;
+using MerchantAdmin.EventBus.Events;
 
 namespace IntegrationEventLogEF.Services;
 
@@ -12,7 +12,8 @@ public class IntegrationEventLogService<TContext> : IIntegrationEventLogService,
     public IntegrationEventLogService(TContext context)
     {
         _context = context;
-        _eventTypes = Assembly.Load(Assembly.Load("MerchantAdmin.Application").FullName)
+        // 事件定义位于 IntegrationEvent 基类所在的 EventBus 程序集
+        _eventTypes = typeof(IntegrationEvent).Assembly
             .GetTypes()
             .Where(t => t.Name.EndsWith(nameof(IntegrationEvent)))
             .ToArray();

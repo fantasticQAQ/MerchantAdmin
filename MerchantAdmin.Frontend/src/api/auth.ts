@@ -5,48 +5,32 @@ export interface LoginParams {
   username: string
   password: string
 }
+
+/** 登录结果（Identity.API 返回 { token, userName, roles }） */
 export interface LoginResult {
-  accessToken: string
-  refreshToken: string
-}
-export interface LoginResult2 {
   token: string
+  userName: string
+  roles: string[]
 }
 
-
+/** 注册参数 */
 export interface RegisterParams {
   userName: string
   password: string
   email: string
 }
-export interface RegisterResult {
-  value: string
-}
 
-
-export interface RefreshTokenResult {
-  accessToken: string
-  refreshToken: string
-}
-
-
-
-export function refreshTokenApi(refreshToken: string) {
-  return request.post<RefreshTokenResult>(
-    '/api/auth/refresh',
-    { refreshToken }
-  )
-}
-
-
+/** 登录 */
 export function login(data: LoginParams) {
   return request.post<LoginResult>('/identity/auth/login', data)
 }
 
-export function login2(data: LoginParams) {
-  return request.post<LoginResult2>('/identity/auth/login', data)
+/** 注册 */
+export function register(data: RegisterParams) {
+  return request.post<string>('/identity/auth/register', data)
 }
 
-export function register(data: RegisterParams) {
-  return request.post<RegisterResult>('/identity/auth/register', data)
+/** 修改自己的密码 */
+export function changePassword(oldPassword: string, newPassword: string) {
+  return request.post<string>('/identity/auth/change-password', { oldPassword, newPassword })
 }

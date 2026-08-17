@@ -35,6 +35,11 @@
             登录
           </el-button>
         </el-form-item>
+
+        <div class="login-footer">
+          还没有账号？
+          <el-link type="primary" @click="router.push('/register')">去注册</el-link>
+        </div>
       </el-form>
     </el-card>
   </div>
@@ -69,7 +74,7 @@ const onSubmit = async () => {
   try {
     await userStore.login(form.value)
     ElMessage.success('登录成功')
-    router.push('/dashboard')
+    router.push('/')
   } catch (err: any) {
     ElMessage.error(err.message || '登录失败')
   } finally {
@@ -88,5 +93,10 @@ const onSubmit = async () => {
 }
 .login-card {
   width: 400px;
+}
+.login-footer {
+  text-align: center;
+  font-size: 14px;
+  color: #909399;
 }
 </style>

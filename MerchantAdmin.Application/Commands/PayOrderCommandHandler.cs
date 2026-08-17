@@ -1,7 +1,8 @@
-﻿using MediatR;
+using MediatR;
 using MerchantAdmin.Application.IntegrationEvents;
-using MerchantAdmin.Application.IntegrationEvents.Events;
+using MerchantAdmin.Domain.Entities.AggregatesModel.OrderAggregate;
 using MerchantAdmin.Domain.Exceptions;
+using MerchantAdmin.EventBus.Events;
 using MerchantAdmin.Infrastructure;
 using MerchantAdmin.Infrastructure.Caching;
 
@@ -14,16 +15,17 @@ namespace MerchantAdmin.Application.Commands
             var order = await db.Orders.FindAsync(cmd.OrderId, ct)
                          ?? throw new DomainException("订单不存在");
 
-            await orderingIntegrationEventService.AddAndSaveEventAsync(new OrderPaymentSucceededIntegrationEvent(order.Id));
+            // 领域状态机：待支付 → 支付处理中（重复支付/已支付/已取消都会被拦截）
+            order.MarkAsPaymentProcessing();
 
-            // 3️⃣ 订单标记为已支付
-            order.MarkAsPaid();
+            // 将"发起支付"事件写入发件箱（SaveEventAsync 内部 SaveChanges，
+            // 订单状态变更与事件日志在同一事务中持久化，保证不丢消息）
+            await orderingIntegrationEventService.AddAndSaveEventAsync(new OrderPaymentStartedIntegrationEvent(order.Id));
 
-            // 5️⃣ 保存
-            await db.SaveEntitiesAsync(ct);
-
-            // 4️⃣ 取消延迟任务
+            // 取消超时自动取消任务（支付已受理，不再因超时取消）
             await delayJob.CancelCancelOrderAsync(order.Id);
+
+            // 订单状态最终由支付服务的支付成功回调驱动回写为已支付
             return order.Id;
         }
     }

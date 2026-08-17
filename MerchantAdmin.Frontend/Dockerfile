@@ -20,8 +20,8 @@ FROM nginx:alpine
 # 删掉默认的 conf.d 配置（避免和主配置冲突）
 RUN rm -f /etc/nginx/conf.d/default.conf
 
-# 复制主配置文件
-COPY nginx.conf /etc/nginx/nginx.conf
+# 复制主配置文件（纯静态，只服务前端产物；API 转发由统一入口 nginx 负责）
+COPY MerchantAdmin.Frontend/nginx.conf /etc/nginx/nginx.conf
 
 # 复制构建产物
 COPY --from=builder /app/MerchantAdmin.Frontend/dist /usr/share/nginx/html

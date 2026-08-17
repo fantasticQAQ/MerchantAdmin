@@ -1,4 +1,3 @@
-﻿using MerchantAdmin.Domain.Entities.AggregatesModel.OrderAggregate;
 using MerchantAdmin.Infrastructure;
 using MerchantAdmin.Infrastructure.Caching;
 using Microsoft.Extensions.DependencyInjection;
@@ -8,6 +7,11 @@ using System.Threading.Channels;
 
 namespace MerchantAdmin.Application.Services;
 
+/// <summary>
+/// 监听 Redis key 过期事件，触发订单超时关闭（实时通道）。
+/// 与 OrderTimeoutCompensationService（定时兜底扫描）构成双保险：
+/// 过期事件负责实时触发，兜底扫描负责弥补事件丢失（Redis 通知不可靠/服务重启期间）。
+/// </summary>
 public sealed class RedisExpiredOrderConsumer : BackgroundService
 {
     private readonly IRedisConnectionProvider _provider;
@@ -30,7 +34,7 @@ public sealed class RedisExpiredOrderConsumer : BackgroundService
 
     protected override async Task ExecuteAsync(CancellationToken ct)
     {
-        // 1️⃣ Redis 订阅（只负责转发）
+        // Redis 订阅（只负责转发）
         var sub = _provider.Connection.GetSubscriber();
         await sub.SubscribeAsync("__keyevent@0__:expired", (_, key) =>
         {
@@ -41,24 +45,13 @@ public sealed class RedisExpiredOrderConsumer : BackgroundService
             _channel.Writer.TryWrite(orderId);
         });
 
-        // 2️⃣ 异步消费
+        // 异步消费
         await foreach (var orderId in _channel.Reader.ReadAllAsync(ct))
         {
-            await ProcessCancelAsync(orderId, ct);
+            using var scope = _sp.CreateScope();
+            var processor = scope.ServiceProvider.GetRequiredService<OrderTimeoutProcessor>();
+            await processor.ProcessOrderAsync(orderId, ct);
         }
-    }
-
-    private async Task ProcessCancelAsync(long orderId, CancellationToken ct)
-    {
-        using var scope = _sp.CreateScope();
-        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-
-        var order = await db.Orders.FindAsync(orderId, ct);
-        if (order == null || order.OrderStatus != OrderStatus.Created)
-            return;
-
-        order.Cancel();
-        await db.SaveEntitiesAsync(ct);
     }
 
     private static bool TryParseOrderId(RedisValue key, out int orderId)

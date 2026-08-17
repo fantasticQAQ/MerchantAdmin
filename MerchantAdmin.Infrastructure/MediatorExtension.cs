@@ -1,4 +1,4 @@
-﻿using MerchantAdmin.Ordering.Domain.Seedwork;
+using MerchantAdmin.Domain.Seedwork;
 
 namespace MerchantAdmin.Infrastructure;
 

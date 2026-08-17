@@ -1,7 +1,8 @@
-﻿using MerchantAdmin.Infrastructure.Caching;
+﻿using MerchantAdmin.API.Common;
+using MerchantAdmin.Infrastructure.Caching;
 using Microsoft.AspNetCore.Mvc;
 
-namespace MerchantAdmin.Api.Controllers
+namespace MerchantAdmin.API.Controllers
 {
     [ApiController]
     [Route("api/[controller]")]
@@ -16,24 +17,24 @@ namespace MerchantAdmin.Api.Controllers
         }
 
         [HttpPost("setRedisKey")]
-        public async Task<IActionResult> SetRedisKey()
+        public async Task<ActionResult<ApiResponse>> SetRedisKey()
         {
             await _cache.SetAsync("testKey", "testValue");
-            return Ok();
+            return Ok(ApiResponse.Ok());
         }
 
         [HttpGet("getRedisKey")]
-        public async Task<IActionResult> GetRedisKey()
+        public async Task<ActionResult<ApiResponse<string>>> GetRedisKey()
         {
             var value = await _cache.GetAsync<string>("testKey");
-            return Ok(value);
+            return Ok(ApiResponse<string>.Ok(value!));
         }
 
         [HttpPost("log")]
-        public async Task<IActionResult> Log(string message)
+        public ActionResult<ApiResponse> Log(string message)
         {
             _logger.LogInformation("Log message: {Message}", message);
-            return Ok();
+            return Ok(ApiResponse.Ok());
         }
     }
 }

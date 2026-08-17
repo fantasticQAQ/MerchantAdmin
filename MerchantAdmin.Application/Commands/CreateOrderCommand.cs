@@ -1,6 +1,9 @@
-﻿using MediatR;
+using MediatR;
 using MerchantAdmin.Application.Dtos;
 
-public record CreateOrderCommand(
-    List<OrderItemDto> OrderItems
-) : IRequest<int>;
+namespace MerchantAdmin.Application.Commands
+{
+    public record CreateOrderCommand(
+        List<OrderItemDto> OrderItems
+    ) : IRequest<int>;
+}

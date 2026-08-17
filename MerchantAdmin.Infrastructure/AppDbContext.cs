@@ -1,4 +1,4 @@
-﻿using IntegrationEventLogEF;
+using IntegrationEventLogEF;
 using MerchantAdmin.Domain.Entities.AggregatesModel;
 using MerchantAdmin.Domain.Entities.AggregatesModel.OrderAggregate;
 using System.Data;
@@ -10,6 +10,7 @@ public class AppDbContext : DbContext, IUnitOfWork
     public DbSet<Order> Orders { get; set; }
     public DbSet<OrderItem> OrderItems { get; set; }
     public DbSet<Product> Products { get; set; }
+    public DbSet<OperationLog> OperationLogs { get; set; }
 
     private readonly IMediator _mediator;
     private IDbContextTransaction _currentTransaction;

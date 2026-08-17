@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Diagnostics.CodeAnalysis;
 using System.Text;
 using System.Text.Json;
@@ -15,39 +15,41 @@ namespace EventBusRabbitMQ
     public sealed class RabbitMQEventBus(
     ILogger<RabbitMQEventBus> logger,
      IOptions<EventBusSubscriptionInfo> subscriptionOptions,
+    IOptions<EventBusOptions> options,
     IServiceProvider _serviceProvider) : IEventBus, IHostedService, IDisposable
     {
-        private const string QueueName = "merchantAdmin_queue";
         private const string ExchangeName = "merchantAdmin_events";
 
         private readonly EventBusSubscriptionInfo _subscriptionInfo = subscriptionOptions.Value;
+        // 队列名按服务配置（SubscriptionClientName），默认保持原队列名以兼容
+        private readonly string _queueName = options.Value.SubscriptionClientName ?? "merchantAdmin_queue";
         private IConnection rabbitMQConnection;
         private IChannel _consumerChannel;
 
         public async Task PublishAsync(IntegrationEvent @event)
         {
-            // 1️⃣ 创建 Channel（轻量级）
+            // 创建 Channel（轻量级）
             await using var channel = await rabbitMQConnection.CreateChannelAsync();
 
-            // 2️⃣ 声明 Exchange
+            // 声明 Exchange
             await channel.ExchangeDeclareAsync(
                 exchange: ExchangeName,
                 type: ExchangeType.Topic,
                 durable: true);
 
-            // 3️⃣ RoutingKey = 事件名
+            // RoutingKey = 事件名
             var routingKey = @event.GetType().Name;
 
-            // 4️⃣ 序列化
+            // 序列化
             var body = SerializeMessage(@event);
 
-            // 5️⃣ 消息属性
+            // 消息属性
             var props = new BasicProperties
             {
                 DeliveryMode = DeliveryModes.Persistent
             };
 
-            // 6️⃣ 发布
+            // 发布
             await channel.BasicPublishAsync(
                 exchange: ExchangeName,
                 routingKey: routingKey,
@@ -89,7 +91,7 @@ namespace EventBusRabbitMQ
                         type: ExchangeType.Topic);
 
                     await _consumerChannel.QueueDeclareAsync(
-                        queue: QueueName,
+                        queue: _queueName,
                         durable: true,
                         exclusive: false,
                         autoDelete: false);
@@ -101,7 +103,7 @@ namespace EventBusRabbitMQ
 
                     // 绑定你想监听的事件
                     await _consumerChannel.QueueBindAsync(
-                        queue: QueueName,
+                        queue: _queueName,
                         exchange: ExchangeName,
                         routingKey: "#");
 
@@ -113,7 +115,11 @@ namespace EventBusRabbitMQ
                         var json = Encoding.UTF8.GetString(args.Body.Span);
                         if (!_subscriptionInfo.EventTypes.TryGetValue(eventName, out var eventType))
                         {
+                            // 未订阅的事件类型：跳过并确认，避免消息积压和重复投递
                             logger.LogWarning("Unable to resolve event type for event name {EventName}", eventName);
+                            await _consumerChannel.BasicAckAsync(
+                                deliveryTag: args.DeliveryTag,
+                                multiple: false);
                             return;
                         }
                         var integrationEvent = DeserializeMessage(json, eventType);
@@ -130,7 +136,7 @@ namespace EventBusRabbitMQ
                     };
 
                     await _consumerChannel.BasicConsumeAsync(
-                        queue: QueueName,
+                        queue: _queueName,
                         autoAck: false,
                         consumer: consumer);
 

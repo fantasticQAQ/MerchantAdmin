@@ -1,6 +1,6 @@
-﻿using MediatR;
+using MediatR;
 
-namespace MerchantAdmin.Ordering.Domain.Seedwork;
+namespace MerchantAdmin.Domain.Seedwork;
 
 public abstract class Entity
 {

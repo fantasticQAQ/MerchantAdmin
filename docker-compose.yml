@@ -4,14 +4,14 @@ services:
     container_name: sqlserver
     environment:
       ACCEPT_EULA: "Y"
-      SA_PASSWORD: "P@ssw0rd2024!"
+      SA_PASSWORD: "${SQLSERVER_SA_PASSWORD:-P@ssw0rd2024!}"
       MSSQL_PID: "Express"
     ports:
       - "1433:1433"
     volumes:
       - sqlserver_data:/var/opt/mssql
     healthcheck:
-      test: ["CMD", "/opt/mssql-tools18/bin/sqlcmd", "-S", "localhost", "-U", "sa", "-P", "P@ssw0rd2024!", "-C", "-Q", "SELECT 1"]
+      test: ["CMD", "/opt/mssql-tools18/bin/sqlcmd", "-S", "localhost", "-U", "sa", "-P", "${SQLSERVER_SA_PASSWORD:-P@ssw0rd2024!}", "-C", "-Q", "SELECT 1"]
       interval: 10s
       timeout: 5s
       retries: 10
@@ -23,9 +23,12 @@ services:
   redis:
     image: redis:7-alpine
     container_name: redis
-    command: redis-server --appendonly yes
+    # --notify-keyspace-events Ex：开启 key 过期通知，订单超时自动关闭依赖它（否则静默失效）
+    command: redis-server --appendonly yes --notify-keyspace-events Ex
     ports:
       - "6379:6379"
+    volumes:
+      - redis_data:/data
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
@@ -57,8 +60,10 @@ services:
       - "5341:80"
     environment:
       ACCEPT_EULA: Y
-      SEQ_FIRSTRUN_ADMINPASSWORD: "12345678"
+      SEQ_FIRSTRUN_ADMINPASSWORD: "${SEQ_ADMIN_PASSWORD:-12345678}"
       SEQ_FIRSTRUN_ENFORCEPASSWORDCOMPLEXITY: "false"
+    volumes:
+      - seq_data:/data
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:80/api"]
       interval: 10s
@@ -73,11 +78,10 @@ services:
       context: .    # 改为项目根目录
       dockerfile: Identity.API/Dockerfile      # 指定 Dockerfile 路径
     environment:
-      - ConnectionStrings__Default=Server=sqlserver,1433;Database=MerchantAdmin;User Id=sa;Password=P@ssw0rd2024!;TrustServerCertificate=True;
+      - ConnectionStrings__Default=Server=sqlserver,1433;Database=MerchantAdmin;User Id=sa;Password=${SQLSERVER_SA_PASSWORD:-P@ssw0rd2024!};TrustServerCertificate=True;
     image: identity-api:latest    # 建议加 tag 避免混淆
     container_name: identity-api
-    ports:                         # 如果需要外部访问，添加端口映射
-      - "5001:8080"                  # 根据实际端口修改
+    # 不暴露宿主端口：仅由统一入口 nginx（8081）通过内部网络访问
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
       interval: 10s
@@ -102,11 +106,10 @@ services:
      context: .                 # 改为项目根目录
      dockerfile: MerchantAdmin.API/Dockerfile  # 指定 Dockerfile 路径
     environment:
-      - ConnectionStrings__Default=Server=sqlserver,1433;Database=MerchantAdmin;User Id=sa;Password=P@ssw0rd2024!;TrustServerCertificate=True;
+      - ConnectionStrings__Default=Server=sqlserver,1433;Database=MerchantAdmin;User Id=sa;Password=${SQLSERVER_SA_PASSWORD:-P@ssw0rd2024!};TrustServerCertificate=True;
     image: merchant-api:latest     # 建议加 tag
     container_name: merchant-api
-    ports:                         # 如果需要外部访问
-      - "5002:8080"                  # 根据实际端口修改
+    # 不暴露宿主端口：仅由统一入口 nginx（8081）通过内部网络访问
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
       interval: 10s
@@ -126,14 +129,33 @@ services:
       - merchant-network
     restart: unless-stopped
     
+  payment-api:
+    build:
+      context: .
+      dockerfile: Payment.API/Dockerfile
+    image: payment-api:latest
+    container_name: payment-api
+    # 不暴露宿主端口：支付回调走统一入口 nginx（/api/payment/）
+    environment:
+      - RabbitMQ__HostName=rabbitmq
+      - RabbitMQ__UserName=guest
+      - RabbitMQ__Password=guest
+      - RabbitMQ__Port=5672
+      - EventBus__SubscriptionClientName=payment_queue
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+    networks:
+      - merchant-network
+    restart: unless-stopped
+
   frontend:
     build:
      context: .
      dockerfile: MerchantAdmin.Frontend/Dockerfile
     image: merchant-admin-frontend:latest
     container_name: frontend
-    ports:
-      - "8080:80"
+    # 纯静态容器：不对外暴露端口，仅由统一入口 nginx（8081）通过内部网络访问
     depends_on:
       merchant-api:
         condition: service_started
@@ -144,13 +166,16 @@ services:
     restart: unless-stopped
 
   nginx:
-    image: nginx
+    image: nginx:alpine
     container_name: nginx
+    # 统一对外入口
     ports:
-      - "80:80"
+      - "8080:80"
     volumes:
       - ./nginx.conf:/etc/nginx/nginx.conf
     depends_on:
+      frontend:
+        condition: service_started
       merchant-api:
         condition: service_started
       identity-api:
@@ -166,7 +191,7 @@ services:
     image: db-migrator:latest
     container_name: db-migrator
     environment:
-      - ConnectionStrings__Default=Server=sqlserver,1433;Database=MerchantAdmin;User Id=sa;Password=P@ssw0rd2024!;TrustServerCertificate=True;
+      - ConnectionStrings__Default=Server=sqlserver,1433;Database=MerchantAdmin;User Id=sa;Password=${SQLSERVER_SA_PASSWORD:-P@ssw0rd2024!};TrustServerCertificate=True;
     depends_on:
       sqlserver:
         condition: service_healthy
@@ -183,7 +208,7 @@ services:
     container_name: merchant-migrator
     command: ["dotnet", "ef", "database", "update", "--project", "MerchantAdmin.Infrastructure/MerchantAdmin.Infrastructure.csproj", "--startup-project", "MerchantAdmin.API/MerchantAdmin.API.csproj"]
     environment:
-      - ConnectionStrings__Default=Server=sqlserver,1433;Database=MerchantAdmin;User Id=sa;Password=P@ssw0rd2024!;TrustServerCertificate=True;
+      - ConnectionStrings__Default=Server=sqlserver,1433;Database=MerchantAdmin;User Id=sa;Password=${SQLSERVER_SA_PASSWORD:-P@ssw0rd2024!};TrustServerCertificate=True;
     depends_on:
       sqlserver:
         condition: service_healthy
@@ -202,7 +227,7 @@ services:
     container_name: identity-migrator
     command: ["dotnet", "ef", "database", "update", "--project", "Identity.API/Identity.API.csproj", "--startup-project", "Identity.API/Identity.API.csproj"]
     environment:
-      - ConnectionStrings__Default=Server=sqlserver,1433;Database=MerchantAdmin;User Id=sa;Password=P@ssw0rd2024!;TrustServerCertificate=True;
+      - ConnectionStrings__Default=Server=sqlserver,1433;Database=MerchantAdmin;User Id=sa;Password=${SQLSERVER_SA_PASSWORD:-P@ssw0rd2024!};TrustServerCertificate=True;
     depends_on:
       sqlserver:
         condition: service_healthy
@@ -219,3 +244,5 @@ networks:
 
 volumes:
   sqlserver_data:
+  redis_data:
+  seq_data:

@@ -1,11 +1,5 @@
-﻿using MerchantAdmin.Domain.Exceptions;
+using MerchantAdmin.Domain.Exceptions;
 using MerchantAdmin.Domain.Seedwork;
-using MerchantAdmin.Ordering.Domain.Seedwork;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace MerchantAdmin.Domain.Entities.AggregatesModel
 {
@@ -14,6 +8,7 @@ namespace MerchantAdmin.Domain.Entities.AggregatesModel
         public string Name { get; private set; }
         public decimal Price { get; private set; }
         public decimal Stock { get; private set; }
+        public bool IsActive { get; private set; }
 
         protected Product() { }
 
@@ -25,7 +20,30 @@ namespace MerchantAdmin.Domain.Entities.AggregatesModel
             Name = name;
             Price = price;
             Stock = stock;
+            IsActive = true;
         }
+
+        /// <summary>编辑商品名称与价格。</summary>
+        public void UpdateInfo(string name, decimal price)
+        {
+            if (string.IsNullOrWhiteSpace(name)) throw new DomainException("名称不能为空");
+            if (price < 0) throw new DomainException("价格不能为负数");
+
+            Name = name;
+            Price = price;
+        }
+
+        /// <summary>手动调整库存（正数补货，负数扣减），结果不能为负。</summary>
+        public void AdjustStock(decimal delta)
+        {
+            var newStock = Stock + delta;
+            if (newStock < 0) throw new DomainException("库存不能为负数");
+
+            Stock = newStock;
+        }
+
+        /// <summary>上架 / 下架。</summary>
+        public void SetActive(bool active) => IsActive = active;
 
         public void ReduceStock(decimal qty)
         {

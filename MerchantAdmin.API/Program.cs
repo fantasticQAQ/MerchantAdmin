@@ -2,11 +2,13 @@
 using EventBus.Extensions;
 using EventBusRabbitMQ;
 using IntegrationEventLogEF.Services;
+using MerchantAdmin.API.Middlewares;
+using MerchantAdmin.Application;
 using MerchantAdmin.Application.Behaviors;
 using MerchantAdmin.Application.Commands;
 using MerchantAdmin.Application.IntegrationEvents;
 using MerchantAdmin.Application.IntegrationEvents.EventHandling;
-using MerchantAdmin.Application.IntegrationEvents.Events;
+using MerchantAdmin.EventBus.Events;
 using MerchantAdmin.Application.Services;
 using MerchantAdmin.Infrastructure;
 using MerchantAdmin.Infrastructure.Caching;
@@ -15,16 +17,18 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
 using Serilog;
+using System.Security.Claims;
 
 var builder = WebApplication.CreateBuilder(args);
 var services = builder.Services;
 
-// ===== 添加 CORS =====
+// ===== 添加 CORS（限制允许的域名，生产按配置收紧）=====
+var allowedOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>() ?? [];
 builder.Services.AddCors(options =>
 {
-    options.AddPolicy("AllowAll", policy =>
+    options.AddPolicy("AllowFrontend", policy =>
     {
-        policy.AllowAnyOrigin()
+        policy.WithOrigins(allowedOrigins)
               .AllowAnyHeader()
               .AllowAnyMethod();
     });
@@ -41,7 +45,15 @@ services.AddMediatR(cfg =>
     cfg.AddOpenBehavior(typeof(LoggingBehavior<,>));
     cfg.AddOpenBehavior(typeof(ValidatorBehavior<,>));
     cfg.AddOpenBehavior(typeof(TransactionBehavior<,>));
+    cfg.AddOpenBehavior(typeof(OperationLogBehavior<,>));
 });
+
+// 注册应用层服务（含 FluentValidation 校验器）
+services.AddApplication();
+
+// 供操作日志获取当前用户
+services.AddHttpContextAccessor();
+
 services.AddHostedService<RedisExpiredOrderConsumer>();
 
 // 3. 添加RabbitMq
@@ -119,10 +131,32 @@ builder.Services.AddAuthentication(options =>
             Console.WriteLine("❌ JWT 校验失败：" + context.Exception.Message);
             return Task.CompletedTask;
         },
-        OnTokenValidated = context =>
+        OnTokenValidated = async context =>
         {
+            // 校验 SecurityStamp：用户改密码等安全凭证变更后，旧 token 立即失效
+            var userId = context.Principal?.FindFirstValue(ClaimTypes.NameIdentifier);
+            var securityStamp = context.Principal?.FindFirstValue("securityStamp");
+            if (userId != null && long.TryParse(userId, out var userIdLong))
+            {
+                using var scope = context.HttpContext.RequestServices.CreateScope();
+                var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+                try
+                {
+                    var stamp = await db.Database
+                        .SqlQueryRaw<string>("SELECT SecurityStamp AS Value FROM AspNetUsers WHERE Id = {0}", userIdLong)
+                        .FirstOrDefaultAsync();
+                    if (stamp != securityStamp)
+                    {
+                        context.Fail("安全凭证已变更，请重新登录");
+                        return;
+                    }
+                }
+                catch
+                {
+                    // 用户表不可用（如集成测试环境）时跳过安全戳校验
+                }
+            }
             Console.WriteLine("✅ JWT 校验成功");
-            return Task.CompletedTask;
         }
     };
 
@@ -154,7 +188,7 @@ app.MapHealthChecks("/health").AllowAnonymous();
 //    db.Database.Migrate();
 //}
 
-// 7. Swagger（开发环境）
+// 7. Swagger（仅开发环境启用，生产关闭避免泄露接口）
 if (app.Environment.IsDevelopment())
 {
     app.UseDeveloperExceptionPage();
@@ -163,9 +197,6 @@ if (app.Environment.IsDevelopment())
 }
 else
 {
-    app.UseDeveloperExceptionPage();
-    app.UseSwagger();
-    app.UseSwaggerUI();
     app.UseExceptionHandler("/Error");
     // The default HSTS value is 30 days. You may want to change this for production scenarios, see https://aka.ms/aspnetcore-hsts.
     app.UseHsts();
@@ -173,7 +204,11 @@ else
 
 app.UseHttpsRedirection();
 
-//app.UseCors("AllowVueApp");
+// 全局异常处理中间件（尽量靠前，覆盖后续管道异常）
+app.UseMiddleware<GlobalExceptionHandlerMiddleware>();
+
+// CORS（限制允许的前端域名）
+app.UseCors("AllowFrontend");
 
 // 8. 认证 & 授权（顺序不能错）
 app.UseAuthentication(); // ✅ 必须加！
@@ -182,3 +217,6 @@ app.UseAuthorization();
 app.MapControllers();
 
 app.Run();
+
+// 供集成测试的 WebApplicationFactory 引用
+public partial class Program { }

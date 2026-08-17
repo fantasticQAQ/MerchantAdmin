@@ -39,6 +39,7 @@ kubectl delete pod -l app=merchant-api -n merchant
 kubectl delete deployment merchant-api -n merchant
 # 删 Service（如果有的话）
 kubectl delete svc merchant-api -n merchant
+
 # 1. 重新构建前端镜像（不用缓存）
 docker-compose build --no-cache frontend
 # 2. 启动前端容器
@@ -46,18 +47,22 @@ docker-compose up -d frontend
 下载ingress-nginx
 kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/main/deploy/static/provider/cloud/deploy.yaml
 
-只重新构建并启动 merchant-api
-docker compose up -d --build merchant-api
-docker compose up --build db-migrator
+# ① 彻底删除数据库（停全部服务 + 删数据卷：sqlserver 数据、Redis/Seq 数据一并清空）
+docker compose -f docker-compose.yml down -v
 
-# 1. 构建
-docker compose build
-# 2. 基础设施
-docker compose up -d sqlserver redis rabbitmq seq
-# 3. 迁移（一次性）
-docker compose run --rm db-migrator
-# 4. 业务服务
-docker compose up -d identity-api merchant-api frontend
+# ② 重建 identity-api 镜像（种子代码已改，必须重新构建才生效）
+docker compose -f docker-compose.yml build identity-api
+
+# ③ 只起基础设施，等 sqlserver 健康
+docker compose -f docker-compose.yml up -d sqlserver redis rabbitmq seq
+
+# ④ 迁移（EF 会自动建库；若报 "network not found"，先执行下面一行清理残留再重跑）
+docker compose -f docker-compose.yml --profile migrate run --rm merchant-migrator
+docker compose -f docker-compose.yml --profile migrate run --rm identity-migrator
+
+# ⑤ 起全部服务（identity-api 启动时自动执行种子 → 三个角色 + admin/123456 超管）
+docker compose -f docker-compose.yml up -d
+
 
 # 看迁移日志
 docker compose --profile migrate logs merchant-migrator

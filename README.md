@@ -102,8 +102,8 @@ docker compose -f docker-compose.yml up -d sqlserver redis rabbitmq seq
 dotnet ef database update --project MerchantAdmin.Infrastructure --startup-project MerchantAdmin.API
 
 # 3. 后端（各自终端，端口见 launchSettings.json）
-dotnet run --project Identity.API        # http://localhost:5034/swagger
-dotnet run --project MerchantAdmin.API   # http://localhost:5243/swagger
+dotnet run --project Identity.API        # http://localhost:5001/swagger
+dotnet run --project MerchantAdmin.API   # http://localhost:5002/swagger
 dotnet run --project Payment.API         # http://localhost:5003
 
 # 4. 前端
@@ -128,6 +128,9 @@ npm run dev                               # http://localhost:5173
 ## 待完善
 
 - [x] ~~接入真实支付渠道~~（当前用 `MockPaymentProvider` 模拟，未来可替换为支付宝/微信实现）
+
 - [x] 支付超时自动关闭（Redis 过期事件 + 定时兜底扫描双保险）与退款流程
+
 - [ ] 集成测试覆盖订单/支付完整流程（Testcontainers 真实 Redis/RabbitMQ 依赖）
-- [ ] ~~打赏~~ Grafana / Prometheus 指标监控、健康检查告警
+
+  

@@ -2,6 +2,8 @@
 
 一个基于 **.NET 8 微服务架构** 的电商商品/订单后台管理系统。项目以微软官方 **eShopOnContainers** 的架构思想为蓝本，实践 **DDD（领域驱动设计）**、**CQRS**、**事件驱动**、**Outbox 事务发件箱**、**支付网关**、**容器化与 Kubernetes 部署** 等企业级后端技术，是我用来展示 .NET 后端工程能力的个人项目。
 
+> 访问地址：http://1.14.205.214:8080
+>
 > **默认账号**：`admin / 123456`（SuperAdmin 超管）。内置角色：SuperAdmin、Admin、Operator（三者不可删除）。
 
 ## 技术栈
@@ -78,6 +80,7 @@ dotnet test MerchantAdmin.UnitTests
 ```bash
 #1、彻底删除数据库（停全部服务 + 删数据卷：sqlserver 数据、Redis/Seq 数据一并清空）
 docker compose down -v
+docker rm -f db-migrator
 
 #2、构建所有镜像
 docker compose build

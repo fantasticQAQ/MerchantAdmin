@@ -1,6 +1,8 @@
 # MerchantAdmin 商户后台管理系统
 
-一个基于 **.NET 8 微服务架构** 的电商商品/订单后台管理系统。项目以微软官方 **eShopOnContainers** 的架构思想为蓝本，实践 **DDD（领域驱动设计）**、**CQRS**、**事件驱动**、**容器化与 Kubernetes 部署** 等企业级后端技术，是我用来展示 .NET 后端工程能力的个人项目。
+一个基于 **.NET 8 微服务架构** 的电商商品/订单后台管理系统。项目以微软官方 **eShopOnContainers** 的架构思想为蓝本，实践 **DDD（领域驱动设计）**、**CQRS**、**事件驱动**、**Outbox 事务发件箱**、**支付网关**、**容器化与 Kubernetes 部署** 等企业级后端技术，是我用来展示 .NET 后端工程能力的个人项目。
+
+> **默认账号**：`admin / 123456`（SuperAdmin 超管）。内置角色：SuperAdmin、Admin、Operator（三者不可删除）。
 
 ## 技术栈
 
@@ -45,10 +47,13 @@ MerchantAdmin.UnitTests      # 单元测试项目（xUnit + Moq + FluentAssertio
 
 - **商品管理**：创建 / 删除 / 列表查询（列表走 Redis 缓存，写操作主动失效缓存）。
 - **订单流程**：
-  - 下单 → 扣减库存 → 写入 Redis 延迟键（15 分钟未支付自动取消）；
+  - 下单 → 扣减库存 → 写入 Redis 延迟键（15 分钟未支付自动关闭）；
   - 支付 → 订单进入「支付处理中」→ 发布「发起支付」事件（发件箱）→ **Payment.API 订阅 → 调用支付渠道 → 发布「支付成功」事件** → 订单服务订阅并回写「已支付」（幂等）；
-  - 取消 → 状态校验 → 触发领域事件 → 通过领域事件处理器回补库存。
-- **超时自动取消**：Redis `keyspace notification` 监听过期键 + `Channel` 异步消费，实现下单后超时未支付自动取消并回补库存。
+  - 取消 → 状态校验 → 触发领域事件 → 通过领域事件处理器回补库存；
+  - 退款 → 已支付订单退款为「已退款」并回补库存。
+- **订单状态机**：`Created → PaymentProcessing → Paid/Refunded`，另有终态 `Cancelled`（用户取消）、`TimedOut`（超时关闭），全部迁移由 `DomainException` 状态机 + `RowVersion` 乐观并发锁双重保护。
+- **库存语义**：库存只由交易状态变更驱动——下单扣减，取消失败/超时/退款回补；**删除订单是纯归档、不改变库存**。
+- **超时关闭（双保险）**：① Redis `keyspace notification` 实时监听过期键自动关闭；② 每 5 分钟定时兜底扫描 `Created 且超时` 的订单补关，弥补事件丢失窗口期。
 - **独立支付网关**：`Payment.API` 通过 `IPaymentProvider` 抽象支付渠道（当前用 `MockPaymentProvider` 模拟，未来接支付宝/微信只需新增实现）；`PaymentCallbackController` 演示第三方回调验签。
 - **事件驱动解耦**：跨服务通过「发件箱 → RabbitMQ → 消费者回写」形成完整闭环，配合 `IntegrationEventLogEF` 实现消息的最终一致性。
 - **统一响应与异常处理**：所有接口返回统一的 `ApiResponse<T>` 结构；全局异常中间件将领域异常、校验异常、未预期异常分别映射为规范化的 HTTP 状态码与业务错误码。
@@ -62,46 +67,59 @@ MerchantAdmin.UnitTests      # 单元测试项目（xUnit + Moq + FluentAssertio
 dotnet test MerchantAdmin.UnitTests
 ```
 
-- **单元测试**（36 个）：`Order` 聚合根状态流转、`Product` 库存规则、值对象相等性、FluentValidation 校验器正反用例、`CreateOrderCommandHandler` 下单与库存扣减、支付事件消费者的幂等回写。
-- **集成测试**（5 个）：基于 `WebApplicationFactory` + SQLite 内存库（mock 掉 Redis/RabbitMQ），验证 JWT 认证（未携带 token 返回 401）、商品 CRUD 的完整 HTTP 链路、以及参数校验错误码的规范化返回。
+- **单元/集成测试**（70+ 个）：`Order` / `Product` 领域状态机与库存规则、FluentValidation 校验器、命令处理（下单/取消/删除/超时）、领域事件回补库存、订单超时处理器、支付回调幂等、身份种子数据、JWT 认证（401）、商品 CRUD、参数校验错误码规范化。
 
 ## 环境与启动
 
-### 依赖（Docker Compose 一键启动）
+### Docker Compose 一键部署（推荐）
 
 基础设施：SQL Server、Redis、RabbitMQ、Seq 日志。
 
 ```bash
-docker-compose up -d sqlserver redis rabbitmq seq
+# 1. 首次部署：数据库迁移 + 初始化种子数据（角色 + admin 超管）
+docker compose -f docker-compose.yml --profile migrate up -d
+
+# 2. 启动全部服务
+docker compose -f docker-compose.yml up -d
 ```
 
-数据库迁移（首次部署时，带 `migrate` profile）：
+**对外入口（唯一端口）：`http://localhost:8080`**——nginx 统一反向代理，前端静态资源 + 三个后端服务的 API 都在此入口，后端容器不暴露到宿主。
+
+| 路由 | 转发到 |
+|---|---|
+| `/` | 前端静态资源 |
+| `/api/identity/*` | Identity.API |
+| `/api/merchant/*` | MerchantAdmin.API |
+| `/api/payment/*` | Payment.API |
+
+### 本地开发
 
 ```bash
-docker-compose --profile migrate up db-migrator
-```
+# 1. 基础容器
+docker compose -f docker-compose.yml up -d sqlserver redis rabbitmq seq
 
-### 启动后端服务
+# 2. 数据迁移（首次）
+dotnet ef database update --project MerchantAdmin.Infrastructure --startup-project MerchantAdmin.API
 
-- **Identity.API**（认证服务）：`http://localhost:5001/swagger`
-- **MerchantAdmin.API**（业务服务）：`http://localhost:5002/swagger`
-- **Seq 日志**：`http://localhost:5341`
+# 3. 后端（各自终端，端口见 launchSettings.json）
+dotnet run --project Identity.API        # http://localhost:5034/swagger
+dotnet run --project MerchantAdmin.API   # http://localhost:5243/swagger
+dotnet run --project Payment.API         # http://localhost:5003
 
-### 前端
-
-```bash
+# 4. 前端
 cd MerchantAdmin.Frontend
 npm install
-npm run dev
+npm run dev                               # http://localhost:5173
 ```
 
 ## 认证与授权
 
-所有业务接口（商品/订单）标注了 `[Authorize]`，通过 JWT Bearer 认证：
+基于 **ASP.NET Core Identity + JWT** 的 RBAC 权限体系（角色：SuperAdmin / Admin / Operator + 自定义角色），JWT 携带角色与 SecurityStamp（改密码后旧 token 立即失效）。接口通过 `[Authorize(Roles="...")]` 声明式鉴权。
 
-1. 调用 `POST /api/Auth/register` 注册；
-2. 调用 `POST /api/Auth/login` 获取 `token`；
-3. 请求业务接口时携带 `Authorization: Bearer {token}` 头。
+1. 调用 `POST /api/Auth/login`（或 `register`）获取 `token`；
+2. 请求业务接口时携带 `Authorization: Bearer {token}` 头。
+
+默认超管账号 `admin / 123456`（不可修改角色、不可删除、不可重置密码，仅一台）。
 
 ## 敏感配置说明
 
@@ -109,6 +127,7 @@ npm run dev
 
 ## 待完善
 
-- [ ] 接入真实支付渠道（替换 `MockPaymentProvider` 为支付宝/微信实现）
-- [ ] 集成测试覆盖订单/支付流程（Testcontainers 真实依赖）
-- [ ] 支付失败/超时的补偿与退款流程
+- [x] ~~接入真实支付渠道~~（当前用 `MockPaymentProvider` 模拟，未来可替换为支付宝/微信实现）
+- [x] 支付超时自动关闭（Redis 过期事件 + 定时兜底扫描双保险）与退款流程
+- [ ] 集成测试覆盖订单/支付完整流程（Testcontainers 真实 Redis/RabbitMQ 依赖）
+- [ ] ~~打赏~~ Grafana / Prometheus 指标监控、健康检查告警

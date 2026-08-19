@@ -4,14 +4,14 @@ services:
     container_name: sqlserver
     environment:
       ACCEPT_EULA: "Y"
-      SA_PASSWORD: "${SQLSERVER_SA_PASSWORD:-P@ssw0rd2024!}"
+      SA_PASSWORD: "${SQLSERVER_SA_PASSWORD}"
       MSSQL_PID: "Express"
     ports:
       - "1433:1433"
     volumes:
       - sqlserver_data:/var/opt/mssql
     healthcheck:
-      test: ["CMD", "/opt/mssql-tools18/bin/sqlcmd", "-S", "localhost", "-U", "sa", "-P", "${SQLSERVER_SA_PASSWORD:-P@ssw0rd2024!}", "-C", "-Q", "SELECT 1"]
+      test: ["CMD", "/opt/mssql-tools18/bin/sqlcmd", "-S", "localhost", "-U", "sa", "-P", "${SQLSERVER_SA_PASSWORD}", "-C", "-Q", "SELECT 1"]
       interval: 10s
       timeout: 5s
       retries: 10
@@ -78,7 +78,12 @@ services:
       context: .    # 改为项目根目录
       dockerfile: Identity.API/Dockerfile      # 指定 Dockerfile 路径
     environment:
-      - ConnectionStrings__Default=Server=sqlserver,1433;Database=MerchantAdmin;User Id=sa;Password=${SQLSERVER_SA_PASSWORD:-P@ssw0rd2024!};TrustServerCertificate=True;
+      - ConnectionStrings__Default=Server=sqlserver,1433;Database=MerchantAdmin.Identity;User Id=sa;Password=${SQLSERVER_SA_PASSWORD};TrustServerCertificate=True;
+      - Jwt__Issuer=${JWT_ISSUER}
+      - Jwt__Key=${JWT_KEY}
+      - WeChat__AppId=${WECHAT_APPID}
+      - WeChat__AppSecret=${WECHAT_APPSECRET}
+      - InternalApi__Key=${INTERNAL_API_KEY}
     image: identity-api:latest    # 建议加 tag 避免混淆
     container_name: identity-api
     # 不暴露宿主端口：仅由统一入口 nginx（8081）通过内部网络访问
@@ -106,7 +111,11 @@ services:
      context: .                 # 改为项目根目录
      dockerfile: MerchantAdmin.API/Dockerfile  # 指定 Dockerfile 路径
     environment:
-      - ConnectionStrings__Default=Server=sqlserver,1433;Database=MerchantAdmin;User Id=sa;Password=${SQLSERVER_SA_PASSWORD:-P@ssw0rd2024!};TrustServerCertificate=True;
+      - ConnectionStrings__Default=Server=sqlserver,1433;Database=MerchantAdmin.Merchant;User Id=sa;Password=${SQLSERVER_SA_PASSWORD};TrustServerCertificate=True;
+      - Jwt__Issuer=${JWT_ISSUER}
+      - Jwt__Key=${JWT_KEY}
+      - InternalApi__BaseUrl=http://identity-api:8080
+      - InternalApi__Key=${INTERNAL_API_KEY}
     image: merchant-api:latest     # 建议加 tag
     container_name: merchant-api
     # 不暴露宿主端口：仅由统一入口 nginx（8081）通过内部网络访问
@@ -136,12 +145,6 @@ services:
     image: payment-api:latest
     container_name: payment-api
     # 不暴露宿主端口：支付回调走统一入口 nginx（/api/payment/）
-    environment:
-      - RabbitMQ__HostName=rabbitmq
-      - RabbitMQ__UserName=guest
-      - RabbitMQ__Password=guest
-      - RabbitMQ__Port=5672
-      - EventBus__SubscriptionClientName=payment_queue
     depends_on:
       rabbitmq:
         condition: service_healthy
@@ -180,6 +183,8 @@ services:
         condition: service_started
       identity-api:
         condition: service_started
+      payment-api:
+        condition: service_started
     networks:
       - merchant-network
     restart: unless-stopped
@@ -191,7 +196,7 @@ services:
     image: db-migrator:latest
     container_name: db-migrator
     environment:
-      - ConnectionStrings__Default=Server=sqlserver,1433;Database=MerchantAdmin;User Id=sa;Password=${SQLSERVER_SA_PASSWORD:-P@ssw0rd2024!};TrustServerCertificate=True;
+      - ConnectionStrings__Default=Server=sqlserver,1433;Database=MerchantAdmin.Merchant;User Id=sa;Password=${SQLSERVER_SA_PASSWORD};TrustServerCertificate=True;
     depends_on:
       sqlserver:
         condition: service_healthy
@@ -208,7 +213,7 @@ services:
     container_name: merchant-migrator
     command: ["dotnet", "ef", "database", "update", "--project", "MerchantAdmin.Infrastructure/MerchantAdmin.Infrastructure.csproj", "--startup-project", "MerchantAdmin.API/MerchantAdmin.API.csproj"]
     environment:
-      - ConnectionStrings__Default=Server=sqlserver,1433;Database=MerchantAdmin;User Id=sa;Password=${SQLSERVER_SA_PASSWORD:-P@ssw0rd2024!};TrustServerCertificate=True;
+      - ConnectionStrings__Default=Server=sqlserver,1433;Database=MerchantAdmin.Merchant;User Id=sa;Password=${SQLSERVER_SA_PASSWORD};TrustServerCertificate=True;
     depends_on:
       sqlserver:
         condition: service_healthy
@@ -225,9 +230,9 @@ services:
       dockerfile: Dockerfile.migrate
     image: db-migrator:latest
     container_name: identity-migrator
-    command: ["dotnet", "ef", "database", "update", "--project", "Identity.API/Identity.API.csproj", "--startup-project", "Identity.API/Identity.API.csproj"]
+    command: ["dotnet", "ef", "database", "update", "--project", "Identity.Infrastructure/Identity.Infrastructure.csproj", "--startup-project", "Identity.API/Identity.API.csproj"]
     environment:
-      - ConnectionStrings__Default=Server=sqlserver,1433;Database=MerchantAdmin;User Id=sa;Password=${SQLSERVER_SA_PASSWORD:-P@ssw0rd2024!};TrustServerCertificate=True;
+      - ConnectionStrings__Default=Server=sqlserver,1433;Database=MerchantAdmin.Identity;User Id=sa;Password=${SQLSERVER_SA_PASSWORD};TrustServerCertificate=True;
     depends_on:
       sqlserver:
         condition: service_healthy

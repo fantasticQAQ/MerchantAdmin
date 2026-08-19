@@ -1,4 +1,4 @@
-﻿using EventBus.Extensions;
+using MerchantAdmin.Shared.EventBus.Extensions;
 using FluentValidation;
 using MediatR;
 using MerchantAdmin.Domain.Exceptions;

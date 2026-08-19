@@ -1,4 +1,4 @@
-﻿using Identity.API.Entities;
+using Identity.Infrastructure.Entities;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.IdentityModel.Tokens;
 using System.IdentityModel.Tokens.Jwt;

@@ -1,5 +1,5 @@
-using EventBus.Abstractions;
-using MerchantAdmin.EventBus.Events;
+using MerchantAdmin.Shared.EventBus.Abstractions;
+using MerchantAdmin.Shared.EventBus.Events;
 using Payment.API.Payments;
 
 namespace Payment.API.EventHandling;

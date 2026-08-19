@@ -11,7 +11,7 @@ namespace MerchantAdmin.Infrastructure
 
             var connectionString =
                 Environment.GetEnvironmentVariable("ConnectionStrings__Default")
-                ?? "Server=127.0.0.1,1433;Database=MerchantAdmin;User Id=sa;Password=P@ssw0rd2024!;TrustServerCertificate=True;MultipleActiveResultSets=true";
+                ?? "Server=127.0.0.1,1433;Database=MerchantAdmin.Merchant;User Id=sa;Password=P@ssw0rd2024!;TrustServerCertificate=True;MultipleActiveResultSets=true";
 
             optionsBuilder.UseSqlServer(connectionString);
 

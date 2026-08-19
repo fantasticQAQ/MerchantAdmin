@@ -4,15 +4,15 @@ WORKDIR /src
 
 # 复制依赖项目文件
 COPY Payment.API/Payment.API.csproj ./Payment.API/
-COPY EventBus/EventBus.csproj ./EventBus/
-COPY EventBusRabbitMQ/EventBusRabbitMQ.csproj ./EventBusRabbitMQ/
+COPY MerchantAdmin.Shared.EventBus/MerchantAdmin.Shared.EventBus.csproj ./MerchantAdmin.Shared.EventBus/
+COPY MerchantAdmin.Shared.EventBus.RabbitMQ/MerchantAdmin.Shared.EventBus.RabbitMQ.csproj ./MerchantAdmin.Shared.EventBus.RabbitMQ/
 # 恢复依赖
 RUN dotnet restore ./Payment.API/Payment.API.csproj
 
 # 复制所有源代码
 COPY Payment.API/ ./Payment.API/
-COPY EventBus/ ./EventBus/
-COPY EventBusRabbitMQ/ ./EventBusRabbitMQ/
+COPY MerchantAdmin.Shared.EventBus/ ./MerchantAdmin.Shared.EventBus/
+COPY MerchantAdmin.Shared.EventBus.RabbitMQ/ ./MerchantAdmin.Shared.EventBus.RabbitMQ/
 # 发布主项目
 WORKDIR /src/Payment.API
 RUN dotnet publish -c Release -o /app/publish

@@ -1,23 +1,21 @@
-﻿using System.Text;
-using EventBus.Extensions;
-using EventBusRabbitMQ;
-using IntegrationEventLogEF.Services;
+﻿using MerchantAdmin.Shared.EventBus.Extensions;
+using MerchantAdmin.Shared.EventBus.RabbitMQ;
+using MerchantAdmin.Shared.IntegrationEventLog.Services;
 using MerchantAdmin.API.Middlewares;
+using MerchantAdmin.API;
 using MerchantAdmin.Application;
 using MerchantAdmin.Application.Behaviors;
 using MerchantAdmin.Application.Commands;
 using MerchantAdmin.Application.IntegrationEvents;
 using MerchantAdmin.Application.IntegrationEvents.EventHandling;
-using MerchantAdmin.EventBus.Events;
+using MerchantAdmin.Shared.EventBus.Events;
 using MerchantAdmin.Application.Services;
 using MerchantAdmin.Infrastructure;
 using MerchantAdmin.Infrastructure.Caching;
-using Microsoft.AspNetCore.Authentication.JwtBearer;
+using MerchantAdmin.Shared.Authentication;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
 using Serilog;
-using System.Security.Claims;
 
 var builder = WebApplication.CreateBuilder(args);
 var services = builder.Services;
@@ -116,64 +114,14 @@ builder.Services.AddDbContext<AppDbContext>((sp, options) =>
 });
 
 
-// 4. JWT 认证
-builder.Services.AddAuthentication(options =>
+// 4. JWT 认证（统一抽到共享库：签名校验 + SecurityStamp 校验 + 实时角色刷新）
+builder.Services.AddAppJwtAuthentication(builder.Configuration);
+// 通过内部 HTTP 接口向 Identity 服务获取用户安全信息（两个服务数据库已拆分）
+builder.Services.AddHttpClient("Identity", client =>
 {
-    options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
-    options.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
-})
-.AddJwtBearer(options =>
-{
-    options.Events = new JwtBearerEvents
-    {
-        OnAuthenticationFailed = context =>
-        {
-            Console.WriteLine("❌ JWT 校验失败：" + context.Exception.Message);
-            return Task.CompletedTask;
-        },
-        OnTokenValidated = async context =>
-        {
-            // 校验 SecurityStamp：用户改密码等安全凭证变更后，旧 token 立即失效
-            var userId = context.Principal?.FindFirstValue(ClaimTypes.NameIdentifier);
-            var securityStamp = context.Principal?.FindFirstValue("securityStamp");
-            if (userId != null && long.TryParse(userId, out var userIdLong))
-            {
-                using var scope = context.HttpContext.RequestServices.CreateScope();
-                var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-                try
-                {
-                    var stamp = await db.Database
-                        .SqlQueryRaw<string>("SELECT SecurityStamp AS Value FROM AspNetUsers WHERE Id = {0}", userIdLong)
-                        .FirstOrDefaultAsync();
-                    if (stamp != securityStamp)
-                    {
-                        context.Fail("安全凭证已变更，请重新登录");
-                        return;
-                    }
-                }
-                catch
-                {
-                    // 用户表不可用（如集成测试环境）时跳过安全戳校验
-                }
-            }
-            Console.WriteLine("✅ JWT 校验成功");
-        }
-    };
-
-    options.TokenValidationParameters = new TokenValidationParameters
-    {
-        ValidateIssuer = true,
-        ValidateAudience = false,
-        ValidateLifetime = true,
-
-        ValidIssuer = builder.Configuration["Jwt:Issuer"],
-        IssuerSigningKey = new SymmetricSecurityKey(
-            Encoding.UTF8.GetBytes(builder.Configuration["Jwt:Key"]!))
-    };
+    client.BaseAddress = new Uri(builder.Configuration["InternalApi:BaseUrl"]!);
 });
-
-// 5. 授权服务（必须加！）
-builder.Services.AddAuthorization();
+builder.Services.AddScoped<ITokenUserProvider, HttpTokenUserProvider>();
 
 builder.Services.AddHealthChecks();
 

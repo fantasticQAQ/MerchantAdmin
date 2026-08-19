@@ -25,13 +25,13 @@ export default defineConfig({
     proxy: {
       // 身份认证服务（本地开发直连，生产走 nginx）
       '/api/identity': {
-        target: 'http://localhost:5034',
+        target: 'http://localhost:5001',
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/api\/identity/, '/api')
       },
       // 订单/商品服务（本地开发直连，生产走 nginx）
       '/api/merchant': {
-        target: 'http://localhost:5243',
+        target: 'http://localhost:5002',
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/api\/merchant/, '/api')
       }

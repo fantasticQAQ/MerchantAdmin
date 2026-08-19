@@ -1,10 +1,8 @@
-﻿using Identity.API.Entities;
+using Identity.Infrastructure.Entities;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
-using System.IdentityModel.Tokens.Jwt;
-using System.Security.Claims;
 
 namespace Identity.API.Controllers
 {
@@ -30,7 +28,7 @@ namespace Identity.API.Controllers
             foreach (var user in users)
             {
                 var roles = await _userManager.GetRolesAsync(user);
-                result.Add(new UserDto(user.Id, user.UserName!, user.Email!, roles.ToList()));
+                result.Add(new UserDto(user.Id, user.UserName!, user.Email, roles.ToList()));
             }
 
             return Ok(result);
@@ -41,7 +39,7 @@ namespace Identity.API.Controllers
         public async Task<IActionResult> Create(CreateUserRequest req)
         {
             var user = new ApplicationUser(req.UserName, req.Email);
-            
+
             var result = await _userManager.CreateAsync(user, req.Password);
             if (!result.Succeeded)
             {
@@ -76,9 +74,10 @@ namespace Identity.API.Controllers
                 return NotFound("用户不存在");
             }
 
-            if (!string.IsNullOrWhiteSpace(req.Email) && req.Email != user.Email)
+            // 邮箱可选：null/空视为无邮箱，允许编辑时清空
+            if (req.Email != user.Email)
             {
-                user.Email = req.Email;
+                user.Email = string.IsNullOrWhiteSpace(req.Email) ? null : req.Email;
                 await _userManager.UpdateAsync(user);
             }
 
@@ -135,7 +134,7 @@ namespace Identity.API.Controllers
             }
 
             // 内置超级管理员保护
-            if (user.UserName == "demo")
+            if (user.UserName == "admin")
             {
                 return BadRequest("内置超级管理员不可删除");
             }
@@ -171,7 +170,7 @@ namespace Identity.API.Controllers
             }
 
             // 内置超级管理员保护：其密码不可由其他管理员重置
-            if (user.UserName == "demo")
+            if (user.UserName == "admin")
             {
                 return BadRequest("内置超级管理员的密码不可重置");
             }
@@ -187,9 +186,9 @@ namespace Identity.API.Controllers
         }
     }
 
-    public record UserDto(long Id, string UserName, string Email, List<string> Roles);
+    public record UserDto(long Id, string UserName, string? Email, List<string> Roles);
 
-    public record CreateUserRequest(string UserName, string Email, string Password, List<string>? Roles);
+    public record CreateUserRequest(string UserName, string? Email, string Password, List<string>? Roles);
 
     public record UpdateUserRequest(string? Email, List<string>? Roles);
 

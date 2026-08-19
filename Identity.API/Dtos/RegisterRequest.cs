@@ -1,4 +1,4 @@
-﻿namespace Identity.API.Dtos
+namespace Identity.API.Dtos
 {
-    public record RegisterRequest(string UserName, string Password, string Email);
+    public record RegisterRequest(string UserName, string Password, string? Email);
 }

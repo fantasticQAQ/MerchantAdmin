@@ -1,4 +1,4 @@
-using IntegrationEventLogEF;
+using MerchantAdmin.Shared.IntegrationEventLog;
 using MerchantAdmin.Domain.Entities.AggregatesModel;
 using MerchantAdmin.Domain.Entities.AggregatesModel.OrderAggregate;
 using System.Data;

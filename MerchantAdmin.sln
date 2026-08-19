@@ -6,6 +6,7 @@ MinimumVisualStudioVersion = 10.0.40219.1
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "src", "src", "{02EA681E-C7D8-13C7-8484-4AC65E1B71E8}"
 	ProjectSection(SolutionItems) = preProject
 		docker-compose.yml = docker-compose.yml
+		Dockerfile.migrate = Dockerfile.migrate
 		nginx.conf = nginx.conf
 	EndProjectSection
 EndProject
@@ -17,11 +18,11 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MerchantAdmin.Domain", "Mer
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MerchantAdmin.Infrastructure", "MerchantAdmin.Infrastructure\MerchantAdmin.Infrastructure.csproj", "{B17740A8-EBFE-4B3D-A56F-38D3930732F9}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "EventBus", "EventBus\EventBus.csproj", "{E61F1E02-83F7-4BB4-8C39-BDE461695D78}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MerchantAdmin.Shared.EventBus", "MerchantAdmin.Shared.EventBus\MerchantAdmin.Shared.EventBus.csproj", "{E61F1E02-83F7-4BB4-8C39-BDE461695D78}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "EventBusRabbitMQ", "EventBusRabbitMQ\EventBusRabbitMQ.csproj", "{C81C43DE-C899-4315-A4D5-8F50C8DFCD84}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MerchantAdmin.Shared.EventBus.RabbitMQ", "MerchantAdmin.Shared.EventBus.RabbitMQ\MerchantAdmin.Shared.EventBus.RabbitMQ.csproj", "{C81C43DE-C899-4315-A4D5-8F50C8DFCD84}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "IntegrationEventLogEF", "IntegrationEventLogEF\IntegrationEventLogEF.csproj", "{E2479070-5EE5-4761-B242-2095B1F4EF30}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MerchantAdmin.Shared.IntegrationEventLog", "MerchantAdmin.Shared.IntegrationEventLog\MerchantAdmin.Shared.IntegrationEventLog.csproj", "{E2479070-5EE5-4761-B242-2095B1F4EF30}"
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Solution Items", "Solution Items", "{017BED86-F953-42B3-B1FE-A369D9E35648}"
 	ProjectSection(SolutionItems) = preProject
@@ -29,6 +30,8 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Solution Items", "Solution 
 	EndProjectSection
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Identity.API", "Identity.API\Identity.API.csproj", "{099B16E2-B029-770B-F661-D2EC1AF56156}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Identity.Infrastructure", "Identity.Infrastructure\Identity.Infrastructure.csproj", "{B8D2E5C3-4A6F-4B9A-9C7D-2E3F4A5B6C7D}"
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "k8s", "k8s", "{243233F7-BD90-405F-B2F3-1075D8E86127}"
 	ProjectSection(SolutionItems) = preProject
@@ -44,12 +47,17 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "k8s", "k8s", "{243233F7-BD9
 		k8s\09-nginx-ingress.yaml = k8s\09-nginx-ingress.yaml
 		k8s\10-deploy-all.sh = k8s\10-deploy-all.sh
 		k8s\11-cleanup-all.sh = k8s\11-cleanup-all.sh
+		k8s\identity-db-migrate-job.yaml = k8s\identity-db-migrate-job.yaml
+		k8s\merchant-db-migrate-job.yaml = k8s\merchant-db-migrate-job.yaml
 		k8s\README.md = k8s\README.md
+		k8s\常用命令.txt = k8s\常用命令.txt
 	EndProjectSection
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MerchantAdmin.UnitTests", "MerchantAdmin.UnitTests\MerchantAdmin.UnitTests.csproj", "{4B20B61C-432B-46CA-B384-80D349176050}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Payment.API", "Payment.API\Payment.API.csproj", "{32607936-6AE9-459B-BCC2-1DF44796A6DE}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MerchantAdmin.Shared.Authentication", "MerchantAdmin.Shared.Authentication\MerchantAdmin.Shared.Authentication.csproj", "{A7C1E4B2-9D3F-4E5A-8B6C-1D2E3F4A5B6C}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -157,6 +165,18 @@ Global
 		{099B16E2-B029-770B-F661-D2EC1AF56156}.Release|x64.Build.0 = Release|Any CPU
 		{099B16E2-B029-770B-F661-D2EC1AF56156}.Release|x86.ActiveCfg = Release|Any CPU
 		{099B16E2-B029-770B-F661-D2EC1AF56156}.Release|x86.Build.0 = Release|Any CPU
+		{B8D2E5C3-4A6F-4B9A-9C7D-2E3F4A5B6C7D}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{B8D2E5C3-4A6F-4B9A-9C7D-2E3F4A5B6C7D}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{B8D2E5C3-4A6F-4B9A-9C7D-2E3F4A5B6C7D}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{B8D2E5C3-4A6F-4B9A-9C7D-2E3F4A5B6C7D}.Debug|x64.Build.0 = Debug|Any CPU
+		{B8D2E5C3-4A6F-4B9A-9C7D-2E3F4A5B6C7D}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{B8D2E5C3-4A6F-4B9A-9C7D-2E3F4A5B6C7D}.Debug|x86.Build.0 = Debug|Any CPU
+		{B8D2E5C3-4A6F-4B9A-9C7D-2E3F4A5B6C7D}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{B8D2E5C3-4A6F-4B9A-9C7D-2E3F4A5B6C7D}.Release|Any CPU.Build.0 = Release|Any CPU
+		{B8D2E5C3-4A6F-4B9A-9C7D-2E3F4A5B6C7D}.Release|x64.ActiveCfg = Release|Any CPU
+		{B8D2E5C3-4A6F-4B9A-9C7D-2E3F4A5B6C7D}.Release|x64.Build.0 = Release|Any CPU
+		{B8D2E5C3-4A6F-4B9A-9C7D-2E3F4A5B6C7D}.Release|x86.ActiveCfg = Release|Any CPU
+		{B8D2E5C3-4A6F-4B9A-9C7D-2E3F4A5B6C7D}.Release|x86.Build.0 = Release|Any CPU
 		{4B20B61C-432B-46CA-B384-80D349176050}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
 		{4B20B61C-432B-46CA-B384-80D349176050}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{4B20B61C-432B-46CA-B384-80D349176050}.Debug|x64.ActiveCfg = Debug|Any CPU
@@ -181,6 +201,18 @@ Global
 		{32607936-6AE9-459B-BCC2-1DF44796A6DE}.Release|x64.Build.0 = Release|Any CPU
 		{32607936-6AE9-459B-BCC2-1DF44796A6DE}.Release|x86.ActiveCfg = Release|Any CPU
 		{32607936-6AE9-459B-BCC2-1DF44796A6DE}.Release|x86.Build.0 = Release|Any CPU
+		{A7C1E4B2-9D3F-4E5A-8B6C-1D2E3F4A5B6C}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{A7C1E4B2-9D3F-4E5A-8B6C-1D2E3F4A5B6C}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{A7C1E4B2-9D3F-4E5A-8B6C-1D2E3F4A5B6C}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{A7C1E4B2-9D3F-4E5A-8B6C-1D2E3F4A5B6C}.Debug|x64.Build.0 = Debug|Any CPU
+		{A7C1E4B2-9D3F-4E5A-8B6C-1D2E3F4A5B6C}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{A7C1E4B2-9D3F-4E5A-8B6C-1D2E3F4A5B6C}.Debug|x86.Build.0 = Debug|Any CPU
+		{A7C1E4B2-9D3F-4E5A-8B6C-1D2E3F4A5B6C}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{A7C1E4B2-9D3F-4E5A-8B6C-1D2E3F4A5B6C}.Release|Any CPU.Build.0 = Release|Any CPU
+		{A7C1E4B2-9D3F-4E5A-8B6C-1D2E3F4A5B6C}.Release|x64.ActiveCfg = Release|Any CPU
+		{A7C1E4B2-9D3F-4E5A-8B6C-1D2E3F4A5B6C}.Release|x64.Build.0 = Release|Any CPU
+		{A7C1E4B2-9D3F-4E5A-8B6C-1D2E3F4A5B6C}.Release|x86.ActiveCfg = Release|Any CPU
+		{A7C1E4B2-9D3F-4E5A-8B6C-1D2E3F4A5B6C}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -194,8 +226,10 @@ Global
 		{C81C43DE-C899-4315-A4D5-8F50C8DFCD84} = {02EA681E-C7D8-13C7-8484-4AC65E1B71E8}
 		{E2479070-5EE5-4761-B242-2095B1F4EF30} = {02EA681E-C7D8-13C7-8484-4AC65E1B71E8}
 		{099B16E2-B029-770B-F661-D2EC1AF56156} = {02EA681E-C7D8-13C7-8484-4AC65E1B71E8}
+		{B8D2E5C3-4A6F-4B9A-9C7D-2E3F4A5B6C7D} = {02EA681E-C7D8-13C7-8484-4AC65E1B71E8}
 		{4B20B61C-432B-46CA-B384-80D349176050} = {02EA681E-C7D8-13C7-8484-4AC65E1B71E8}
 		{32607936-6AE9-459B-BCC2-1DF44796A6DE} = {02EA681E-C7D8-13C7-8484-4AC65E1B71E8}
+		{A7C1E4B2-9D3F-4E5A-8B6C-1D2E3F4A5B6C} = {02EA681E-C7D8-13C7-8484-4AC65E1B71E8}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {78D0B4D9-B967-42E9-9BB4-3CE26E850EEC}

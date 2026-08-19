@@ -1,4 +1,4 @@
-﻿using EventBus.Extensions;
+using MerchantAdmin.Shared.EventBus.Extensions;
 using MediatR;
 using Microsoft.Extensions.Logging;
 

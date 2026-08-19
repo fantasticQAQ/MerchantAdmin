@@ -1,4 +1,4 @@
-﻿using Identity.API.Entities;
+using Identity.Infrastructure.Entities;
 
 namespace Identity.API.Services
 {

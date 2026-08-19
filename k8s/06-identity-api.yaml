@@ -28,7 +28,12 @@ spec:
           valueFrom:
             secretKeyRef:
               name: merchant-secrets
-              key: sqlserver-connectionString
+              key: identity-connectionString
+        - name: InternalApi__Key
+          valueFrom:
+            secretKeyRef:
+              name: merchant-secrets
+              key: internalApi-key
         - name: Redis__ConnectionString
           valueFrom:
             secretKeyRef:

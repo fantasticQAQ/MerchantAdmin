@@ -1,5 +1,5 @@
-using EventBus.Abstractions;
-using IntegrationEventLogEF.Services;
+using MerchantAdmin.Shared.EventBus.Abstractions;
+using MerchantAdmin.Shared.IntegrationEventLog.Services;
 using MerchantAdmin.Application.IntegrationEvents;
 using MerchantAdmin.Infrastructure;
 using MerchantAdmin.Infrastructure.Caching;

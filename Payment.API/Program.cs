@@ -1,6 +1,6 @@
-using EventBus.Extensions;
-using EventBusRabbitMQ;
-using MerchantAdmin.EventBus.Events;
+using MerchantAdmin.Shared.EventBus.Extensions;
+using MerchantAdmin.Shared.EventBus.RabbitMQ;
+using MerchantAdmin.Shared.EventBus.Events;
 using Payment.API.EventHandling;
 using Payment.API.Payments;
 

@@ -1,6 +1,6 @@
-﻿using System.Security.Claims;
+using System.Security.Claims;
 using Identity.API.Dtos;
-using Identity.API.Entities;
+using Identity.Infrastructure.Entities;
 using Identity.API.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
@@ -29,11 +29,17 @@ namespace Identity.API.Controllers
         [HttpPost("register")]
         public async Task<IActionResult> Register(RegisterRequest req)
         {
+            // 邮箱可选：未填写时保持为 null
             var user = new ApplicationUser(req.UserName, req.Email);
             var result = await _userManager.CreateAsync(user, req.Password);
 
             if (!result.Succeeded)
                 return BadRequest(result.Errors);
+
+            // 新注册用户默认赋予管理员角色
+            var addRoleResult = await _userManager.AddToRoleAsync(user, "Admin");
+            if (!addRoleResult.Succeeded)
+                return BadRequest(addRoleResult.Errors);
 
             return Ok("注册成功");
         }
@@ -79,6 +85,22 @@ namespace Identity.API.Controllers
             }
 
             return Ok("密码修改成功");
+        }
+
+        // 获取当前登录用户信息（含最新角色），用于前端角色变更后即时同步 UI
+        [Authorize]
+        [HttpGet("me")]
+        public async Task<IActionResult> Me()
+        {
+            var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+            var user = await _userManager.FindByIdAsync(userId!);
+            if (user is null)
+            {
+                return NotFound("用户不存在");
+            }
+
+            var roles = await _userManager.GetRolesAsync(user);
+            return Ok(new { userName = user.UserName, roles });
         }
     }
 

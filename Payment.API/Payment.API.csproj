@@ -7,8 +7,8 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\EventBus\EventBus.csproj" />
-    <ProjectReference Include="..\EventBusRabbitMQ\EventBusRabbitMQ.csproj" />
+    <ProjectReference Include="..\MerchantAdmin.Shared.EventBus\MerchantAdmin.Shared.EventBus.csproj" />
+    <ProjectReference Include="..\MerchantAdmin.Shared.EventBus.RabbitMQ\MerchantAdmin.Shared.EventBus.RabbitMQ.csproj" />
   </ItemGroup>
 
 </Project>

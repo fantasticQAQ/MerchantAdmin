@@ -1,4 +1,4 @@
-﻿using MerchantAdmin.EventBus.Events;
+using MerchantAdmin.Shared.EventBus.Events;
 
 namespace MerchantAdmin.Application.IntegrationEvents
 {

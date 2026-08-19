@@ -1,6 +1,6 @@
-﻿using EventBus.Abstractions;
-using IntegrationEventLogEF.Services;
-using MerchantAdmin.EventBus.Events;
+using MerchantAdmin.Shared.EventBus.Abstractions;
+using MerchantAdmin.Shared.IntegrationEventLog.Services;
+using MerchantAdmin.Shared.EventBus.Events;
 using MerchantAdmin.Infrastructure;
 using Microsoft.Extensions.Logging;
 

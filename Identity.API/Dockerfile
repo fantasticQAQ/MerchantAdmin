@@ -4,11 +4,18 @@ WORKDIR /src
 
 # 复制项目文件（注意文件名带点号）
 COPY Identity.API/Identity.API.csproj ./Identity.API/
+COPY Identity.Infrastructure/Identity.Infrastructure.csproj ./Identity.Infrastructure/
+COPY MerchantAdmin.Shared.Authentication/MerchantAdmin.Shared.Authentication.csproj ./MerchantAdmin.Shared.Authentication/
+
+
 # 恢复依赖
 RUN dotnet restore ./Identity.API/Identity.API.csproj
 
 # 复制所有源代码
 COPY Identity.API/ ./Identity.API/
+COPY Identity.Infrastructure/ ./Identity.Infrastructure/
+COPY MerchantAdmin.Shared.Authentication/ ./MerchantAdmin.Shared.Authentication/
+
 # 发布主项目
 WORKDIR /src/Identity.API
 RUN dotnet publish -c Release -o /app/publish

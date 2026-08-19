@@ -1,14 +1,10 @@
-﻿using Identity.API.Entities;
-using Identity.API;
-using Identity.API.Entities;
+﻿using Identity.Infrastructure.Entities;
+using Identity.Infrastructure;
 using Identity.API.Services;
-using Microsoft.AspNetCore.Authentication.JwtBearer;
+using MerchantAdmin.Shared.Authentication;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
-using System.Security.Claims;
-using System.Text;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -75,67 +71,31 @@ builder.Services.Configure<IdentityOptions>(options =>
     // 用户设置
     options.User.AllowedUserNameCharacters =
         "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-._@+";
-    options.User.RequireUniqueEmail = true;
+    options.User.RequireUniqueEmail = false;
 });
 
-// 4. JWT 认证
-builder.Services.AddAuthentication(options =>
-{
-    options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
-    options.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
-})
-.AddJwtBearer(options =>
-{
-    options.Events = new JwtBearerEvents
-    {
-        OnAuthenticationFailed = context =>
-        {
-            Console.WriteLine("❌ JWT 校验失败：" + context.Exception.Message);
-            return Task.CompletedTask;
-        },
-        OnTokenValidated = async context =>
-        {
-            // 校验 SecurityStamp：用户改密码等安全凭证变更后，旧 token 立即失效
-            var userId = context.Principal?.FindFirstValue(ClaimTypes.NameIdentifier);
-            var securityStamp = context.Principal?.FindFirstValue("securityStamp");
-            if (userId != null)
-            {
-                using var scope = context.HttpContext.RequestServices.CreateScope();
-                var userManager = scope.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>();
-                var user = await userManager.FindByIdAsync(userId);
-                if (user is null || user.SecurityStamp != securityStamp)
-                {
-                    context.Fail("安全凭证已变更，请重新登录");
-                    return;
-                }
-            }
-            Console.WriteLine("✅ JWT 校验成功");
-        }
-    };
-
-    options.TokenValidationParameters = new TokenValidationParameters
-    {
-        ValidateIssuer = true,
-        ValidateAudience = false,
-        ValidateLifetime = true,
-
-        ValidIssuer = builder.Configuration["Jwt:Issuer"],
-        IssuerSigningKey = new SymmetricSecurityKey(
-            Encoding.UTF8.GetBytes(builder.Configuration["Jwt:Key"]!))
-    };
-});
-
-// 5. 授权服务（必须加！）
-builder.Services.AddAuthorization();
+// 4. JWT 认证（统一抽到共享库：签名校验 + SecurityStamp 校验 + 实时角色刷新）
+builder.Services.AddAppJwtAuthentication(builder.Configuration);
+builder.Services.AddScoped<ITokenUserProvider, UserManagerTokenUserProvider>();
 
 // 6. Token 服务
 builder.Services.AddScoped<ITokenService, TokenService>();
+
+// 7. 微信小程序认证
+builder.Services.AddHttpClient<WxAuthService>();
 
 builder.Services.AddHealthChecks();
 
 var app = builder.Build();
 
 app.MapHealthChecks("/health").AllowAnonymous();
+
+//多个 Pod 同时启动时可能并发迁移（SQL Server 会锁表，一般不会炸，但会报错） 放部署文件中
+//using (var scope = app.Services.CreateScope())
+//{
+//    var db = scope.ServiceProvider.GetRequiredService<IdentityDbContext>();
+//    db.Database.Migrate();
+//}
 
 // 初始化角色与管理员（种子数据）
 using (var scope = app.Services.CreateScope())
@@ -155,7 +115,7 @@ using (var scope = app.Services.CreateScope())
     var admin = await userManager.FindByNameAsync("admin");
     if (admin is null)
     {
-        admin = new ApplicationUser("admin", "admin@qq.com");
+        admin = new ApplicationUser("admin", null);
         var createResult = await userManager.CreateAsync(admin, "123456");
         Console.WriteLine($"[SEED] CreateAsync Succeeded={createResult.Succeeded} Errors={string.Join(";", createResult.Errors.Select(e => e.Description))}");
         if (createResult.Succeeded)
@@ -164,13 +124,6 @@ using (var scope = app.Services.CreateScope())
         }
     }
 }
-
-//多个 Pod 同时启动时可能并发迁移（SQL Server 会锁表，一般不会炸，但会报错） 放部署文件中
-//using (var scope = app.Services.CreateScope())
-//{
-//    var db = scope.ServiceProvider.GetRequiredService<IdentityDbContext>();
-//    db.Database.Migrate();
-//}
 
 app.Use(async (context, next) =>
 {

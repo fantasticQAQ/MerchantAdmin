@@ -16,8 +16,8 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\EventBus\EventBus.csproj" />
-    <ProjectReference Include="..\IntegrationEventLogEF\IntegrationEventLogEF.csproj" />
+    <ProjectReference Include="..\MerchantAdmin.Shared.EventBus\MerchantAdmin.Shared.EventBus.csproj" />
+    <ProjectReference Include="..\MerchantAdmin.Shared.IntegrationEventLog\MerchantAdmin.Shared.IntegrationEventLog.csproj" />
     <ProjectReference Include="..\MerchantAdmin.Domain\MerchantAdmin.Domain.csproj" />
     <ProjectReference Include="..\MerchantAdmin.Infrastructure\MerchantAdmin.Infrastructure.csproj" />
   </ItemGroup>

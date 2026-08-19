@@ -28,7 +28,14 @@ spec:
           valueFrom:
             secretKeyRef:
               name: merchant-secrets
-              key: sqlserver-connectionString
+              key: merchant-connectionString
+        - name: InternalApi__BaseUrl
+          value: "http://identity-api:5001"
+        - name: InternalApi__Key
+          valueFrom:
+            secretKeyRef:
+              name: merchant-secrets
+              key: internalApi-key
         - name: Redis__ConnectionString
           valueFrom:
             secretKeyRef:

@@ -1,0 +1,20 @@
+{
+  "name": "商户管理",
+  "appid": "",
+  "description": "商户管理微信小程序",
+  "versionName": "1.0.0",
+  "versionCode": "100",
+  "transformPx": false,
+  "mp-weixin": {
+    "appid": "你的微信小程序AppId",
+    "setting": {
+      "urlCheck": false,
+      "es6": true,
+      "minified": true
+    },
+    "usingComponents": true
+  },
+  "h5": {
+    "title": "商户管理"
+  }
+}

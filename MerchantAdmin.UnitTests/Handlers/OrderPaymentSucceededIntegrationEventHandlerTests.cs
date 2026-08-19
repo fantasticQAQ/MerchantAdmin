@@ -3,7 +3,7 @@ using MediatR;
 using MerchantAdmin.Application.IntegrationEvents.EventHandling;
 using MerchantAdmin.Domain.Entities.AggregatesModel;
 using MerchantAdmin.Domain.Entities.AggregatesModel.OrderAggregate;
-using MerchantAdmin.EventBus.Events;
+using MerchantAdmin.Shared.EventBus.Events;
 using MerchantAdmin.Infrastructure;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;

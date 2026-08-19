@@ -1,7 +1,7 @@
-using EventBus.Abstractions;
+using MerchantAdmin.Shared.EventBus.Abstractions;
 using MerchantAdmin.Domain.Entities.AggregatesModel.OrderAggregate;
 using MerchantAdmin.Domain.Exceptions;
-using MerchantAdmin.EventBus.Events;
+using MerchantAdmin.Shared.EventBus.Events;
 using MerchantAdmin.Infrastructure;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;

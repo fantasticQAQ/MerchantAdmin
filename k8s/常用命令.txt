@@ -57,6 +57,7 @@ docker compose build
 docker compose up -d sqlserver redis rabbitmq seq
 
 #4、迁移
+docker compose --profile migrate build db-migrator
 docker compose --profile migrate run --rm merchant-migrator
 docker compose --profile migrate run --rm identity-migrator
 

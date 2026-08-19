@@ -16,10 +16,6 @@
           <el-input v-model="form.username" placeholder="请输入用户名" />
         </el-form-item>
 
-        <el-form-item label="邮箱" prop="email">
-          <el-input v-model="form.email" placeholder="请输入邮箱" />
-        </el-form-item>
-
         <el-form-item label="密码" prop="password">
           <el-input
             v-model="form.password"
@@ -36,6 +32,10 @@
             placeholder="请再次输入密码"
             show-password
           />
+        </el-form-item>
+
+        <el-form-item label="邮箱" prop="email">
+          <el-input v-model="form.email" placeholder="请输入邮箱（可选）" />
         </el-form-item>
 
         <el-form-item>
@@ -86,10 +86,7 @@ const validateConfirmPassword = (_rule: unknown, value: string, callback: (error
 
 const rules = {
   username: [{ required: true, message: '请输入用户名', trigger: 'blur' }],
-  email: [
-    { required: true, message: '请输入邮箱', trigger: 'blur' },
-    { type: 'email', message: '邮箱格式不正确', trigger: 'blur' }
-  ],
+  email: [{ type: 'email', message: '邮箱格式不正确', trigger: 'blur' }],
   password: [
     { required: true, message: '请输入密码', trigger: 'blur' },
     { min: 6, message: '密码至少 6 位', trigger: 'blur' }

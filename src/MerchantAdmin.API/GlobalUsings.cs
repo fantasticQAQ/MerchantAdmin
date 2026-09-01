@@ -1,0 +1,13 @@
+global using FluentValidation;
+global using MediatR;
+global using MerchantAdmin.Domain.Entities.AggregatesModel.OrderAggregate;
+global using MerchantAdmin.Infrastructure;
+global using MerchantAdmin.Shared.EventBus.Events;
+global using MerchantAdmin.Shared.EventBus.Extensions;
+global using Microsoft.AspNetCore.Authorization;
+global using Microsoft.AspNetCore.Mvc;
+global using Microsoft.EntityFrameworkCore;
+global using Microsoft.Extensions.DependencyInjection;
+global using Microsoft.Extensions.Hosting;
+global using Microsoft.Extensions.Logging;
+global using Microsoft.Extensions.Options;

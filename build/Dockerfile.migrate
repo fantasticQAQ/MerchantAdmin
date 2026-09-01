@@ -1,0 +1,13 @@
+# ============ 数据库迁移执行器 ============
+# 用 SQL Server 自带 sqlcmd 执行「预先生成」的迁移 SQL 脚本，
+# 替代运行时 `dotnet ef database update`（生产环境无需 .NET SDK）。
+FROM mcr.microsoft.com/mssql/server:2022-latest
+
+WORKDIR /scripts
+
+# 复制预生成的迁移 SQL（由 local-ci.ps1 / CI 用 `dotnet ef migrations script` 生成）
+COPY build/sql/ /scripts/
+
+# 覆盖 SQL Server 默认入口；实际执行命令由 docker-compose / K8s Job 通过 command 覆盖
+ENTRYPOINT ["/bin/bash", "-c"]
+CMD ["echo 'No migration script specified. Override command with sqlcmd.'"]

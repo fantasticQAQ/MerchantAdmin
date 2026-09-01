@@ -1,0 +1,38 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="FluentValidation" Version="12.1.1" />
+    <PackageReference Include="FluentValidation.DependencyInjectionExtensions" Version="12.1.1" />
+    <PackageReference Include="MediatR" Version="14.1.0" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Tools" Version="8.0.27">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+    <PackageReference Include="Microsoft.Extensions.Caching.Abstractions" Version="8.0.0" />
+    <PackageReference Include="Microsoft.Extensions.Caching.StackExchangeRedis" Version="8.0.27" />
+    <PackageReference Include="Serilog" Version="4.3.1" />
+    <PackageReference Include="Serilog.AspNetCore" Version="10.0.0" />
+    <PackageReference Include="Serilog.Sinks.Seq" Version="9.1.0" />
+    <PackageReference Include="Swashbuckle.AspNetCore" Version="8.1.4" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\MerchantAdmin.Shared.EventBus.RabbitMQ\MerchantAdmin.Shared.EventBus.RabbitMQ.csproj" />
+    <ProjectReference Include="..\MerchantAdmin.Shared.EventBus\MerchantAdmin.Shared.EventBus.csproj" />
+    <ProjectReference Include="..\MerchantAdmin.Shared.IntegrationEventLog\MerchantAdmin.Shared.IntegrationEventLog.csproj" />
+    <ProjectReference Include="..\MerchantAdmin.Domain\MerchantAdmin.Domain.csproj" />
+    <ProjectReference Include="..\MerchantAdmin.Infrastructure\MerchantAdmin.Infrastructure.csproj" />
+    <ProjectReference Include="..\MerchantAdmin.Shared.Authentication\MerchantAdmin.Shared.Authentication.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Service Include="{508349b6-6b84-4df5-91f0-309beebad82d}" />
+  </ItemGroup>
+
+</Project>

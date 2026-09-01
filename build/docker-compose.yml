@@ -1,0 +1,236 @@
+services:
+  sqlserver:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    container_name: sqlserver
+    environment:
+      ACCEPT_EULA: "Y"
+      SA_PASSWORD: "${SQLSERVER_SA_PASSWORD}"
+      MSSQL_PID: "Express"
+    ports:
+      - "1433:1433"
+    volumes:
+      - sqlserver_data:/var/opt/mssql
+    healthcheck:
+      test: ["CMD", "/opt/mssql-tools18/bin/sqlcmd", "-S", "localhost", "-U", "sa", "-P", "${SQLSERVER_SA_PASSWORD}", "-C", "-Q", "SELECT 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    networks:
+      - merchant-network
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    container_name: redis
+    # --notify-keyspace-events Ex：开启 key 过期通知，订单超时自动关闭依赖它（否则静默失效）
+    command: redis-server --appendonly yes --notify-keyspace-events Ex
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - merchant-network
+    restart: unless-stopped
+
+  rabbitmq:
+    image: rabbitmq:3-management-alpine
+    container_name: rabbitmq
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - merchant-network
+    restart: unless-stopped
+
+  seq:
+    image: datalust/seq:latest
+    container_name: seq
+    ports:
+      - "5341:80"
+    environment:
+      ACCEPT_EULA: Y
+      SEQ_FIRSTRUN_ADMINPASSWORD: "${SEQ_ADMIN_PASSWORD:-12345678}"
+      SEQ_FIRSTRUN_ENFORCEPASSWORDCOMPLEXITY: "false"
+    volumes:
+      - seq_data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:80/api"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - merchant-network
+    restart: unless-stopped
+
+  identity-api:
+    build:
+      context: ..                 # 项目根目录（含 src/）
+      dockerfile: src/Identity.API/Dockerfile
+    environment:
+      - ConnectionStrings__Default=Server=sqlserver,1433;Database=MerchantAdmin.Identity;User Id=sa;Password=${SQLSERVER_SA_PASSWORD};TrustServerCertificate=True;
+      - Jwt__Issuer=${JWT_ISSUER}
+      - Jwt__Key=${JWT_KEY}
+      - WeChat__AppId=${WECHAT_APPID}
+      - WeChat__AppSecret=${WECHAT_APPSECRET}
+      - InternalApi__Key=${INTERNAL_API_KEY}
+    image: identity-api:latest    # 建议加 tag 避免混淆
+    container_name: identity-api
+    # 不暴露宿主端口：仅由统一入口 nginx（8081）通过内部网络访问
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    depends_on:
+      redis:
+        condition: service_healthy
+      sqlserver:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      seq:
+        condition: service_healthy
+    networks:
+      - merchant-network
+    restart: unless-stopped
+
+  merchant-api:
+    build:
+     context: ..                 # 项目根目录（含 src/）
+     dockerfile: src/MerchantAdmin.API/Dockerfile
+    environment:
+      - ConnectionStrings__Default=Server=sqlserver,1433;Database=MerchantAdmin.Merchant;User Id=sa;Password=${SQLSERVER_SA_PASSWORD};TrustServerCertificate=True;
+      - Jwt__Issuer=${JWT_ISSUER}
+      - Jwt__Key=${JWT_KEY}
+      - InternalApi__BaseUrl=http://identity-api:8080
+      - InternalApi__Key=${INTERNAL_API_KEY}
+    image: merchant-api:latest     # 建议加 tag
+    container_name: merchant-api
+    # 不暴露宿主端口：仅由统一入口 nginx（8081）通过内部网络访问
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    depends_on:
+      redis:
+        condition: service_healthy
+      sqlserver:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      seq:
+        condition: service_healthy
+    networks:
+      - merchant-network
+    restart: unless-stopped
+    
+  payment-api:
+    build:
+      context: ..
+      dockerfile: src/Payment.API/Dockerfile
+    image: payment-api:latest
+    container_name: payment-api
+    # 不暴露宿主端口：支付回调走统一入口 nginx（/api/payment/）
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+    networks:
+      - merchant-network
+    restart: unless-stopped
+
+  frontend:
+    build:
+     context: ..
+     dockerfile: src/MerchantAdmin.Frontend/Dockerfile
+    image: merchant-admin-frontend:latest
+    container_name: frontend
+    # 纯静态容器：不对外暴露端口，仅由统一入口 nginx（8081）通过内部网络访问
+    depends_on:
+      merchant-api:
+        condition: service_started
+      identity-api:
+        condition: service_started
+    networks:
+      - merchant-network
+    restart: unless-stopped
+
+  nginx:
+    image: nginx:alpine
+    container_name: nginx
+    # 统一对外入口
+    ports:
+      - "8080:80"
+    volumes:
+      - ../nginx.conf:/etc/nginx/nginx.conf
+    depends_on:
+      frontend:
+        condition: service_started
+      merchant-api:
+        condition: service_started
+      identity-api:
+        condition: service_started
+      payment-api:
+        condition: service_started
+    networks:
+      - merchant-network
+    restart: unless-stopped
+    
+  merchant-migrator:
+    build:
+      context: ..
+      dockerfile: build/Dockerfile.migrate
+    image: db-migrator:latest
+    container_name: merchant-migrator
+    entrypoint: /opt/mssql-tools18/bin/sqlcmd
+    command: ["-S", "sqlserver", "-U", "sa", "-C", "-b", "-i", "/scripts/MerchantAdmin.sql"]
+    environment:
+      SQLCMDPASSWORD: ${SQLSERVER_SA_PASSWORD}
+    depends_on:
+      sqlserver:
+        condition: service_healthy
+    networks:
+      - merchant-network
+    profiles:
+      - migrate
+
+  identity-migrator:
+    build:
+      context: ..
+      dockerfile: build/Dockerfile.migrate
+    image: db-migrator:latest
+    container_name: identity-migrator
+    entrypoint: /opt/mssql-tools18/bin/sqlcmd
+    command: ["-S", "sqlserver", "-U", "sa", "-C", "-b", "-i", "/scripts/Identity.sql"]
+    environment:
+      SQLCMDPASSWORD: ${SQLSERVER_SA_PASSWORD}
+    depends_on:
+      sqlserver:
+        condition: service_healthy
+    networks:
+      - merchant-network
+    profiles:
+      - migrate
+
+networks:
+  merchant-network:
+    name: merchant-network
+    driver: bridge
+
+volumes:
+  sqlserver_data:
+  redis_data:
+  seq_data:

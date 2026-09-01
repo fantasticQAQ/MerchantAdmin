@@ -12,10 +12,10 @@ jobs:
 
     - name: Build Images
       run: |
-        docker build -t merchant-api:${{ github.sha }} -t merchant-api:latest -f MerchantAdmin.API/Dockerfile .
-        docker build -t identity-api:${{ github.sha }} -t identity-api:latest -f Identity.API/Dockerfile .
-        docker build -t merchant-admin-frontend:${{ github.sha }} -t merchant-admin-frontend:latest -f MerchantAdmin.Frontend/Dockerfile .
-        docker build -t db-migrator:${{ github.sha }} -t db-migrator:latest -f Dockerfile.migrate .
+        docker build -t merchant-api:${{ github.sha }} -t merchant-api:latest -f src/MerchantAdmin.API/Dockerfile .
+        docker build -t identity-api:${{ github.sha }} -t identity-api:latest -f src/Identity.API/Dockerfile .
+        docker build -t merchant-admin-frontend:${{ github.sha }} -t merchant-admin-frontend:latest -f src/MerchantAdmin.Frontend/Dockerfile .
+        docker build -t db-migrator:${{ github.sha }} -t db-migrator:latest -f build/Dockerfile.migrate .
 
 
 
@@ -29,23 +29,23 @@ jobs:
       shell: powershell
       run: |
         # 替换镜像 Tag
-        (Get-Content k8s/07-merchant-api.yaml) -replace 'merchant-api:latest', 'merchant-api:${{ github.sha }}' | Set-Content k8s/07-merchant-api.yaml
-        (Get-Content k8s/06-identity-api.yaml) -replace 'identity-api:latest', 'identity-api:${{ github.sha }}' | Set-Content k8s/06-identity-api.yaml
-        (Get-Content k8s/08-merchantadmin.yaml) -replace 'merchant-admin-frontend:latest', 'merchant-admin-frontend:${{ github.sha }}' | Set-Content k8s/08-merchantadmin.yaml
-        (Get-Content k8s/identity-db-migrate-job.yaml) -replace 'db-migrator:latest', 'db-migrator:${{ github.sha }}' | Set-Content k8s/identity-db-migrate-job.yaml
-        (Get-Content k8s/merchant-db-migrate-job.yaml) -replace 'db-migrator:latest', 'db-migrator:${{ github.sha }}' | Set-Content k8s/merchant-db-migrate-job.yaml
+        (Get-Content build/k8s/07-merchant-api.yaml) -replace 'merchant-api:latest', 'merchant-api:${{ github.sha }}' | Set-Content build/k8s/07-merchant-api.yaml
+        (Get-Content build/k8s/06-identity-api.yaml) -replace 'identity-api:latest', 'identity-api:${{ github.sha }}' | Set-Content build/k8s/06-identity-api.yaml
+        (Get-Content build/k8s/08-merchantadmin.yaml) -replace 'merchant-admin-frontend:latest', 'merchant-admin-frontend:${{ github.sha }}' | Set-Content build/k8s/08-merchantadmin.yaml
+        (Get-Content build/k8s/identity-db-migrate-job.yaml) -replace 'db-migrator:latest', 'db-migrator:${{ github.sha }}' | Set-Content build/k8s/identity-db-migrate-job.yaml
+        (Get-Content build/k8s/merchant-db-migrate-job.yaml) -replace 'db-migrator:latest', 'db-migrator:${{ github.sha }}' | Set-Content build/k8s/merchant-db-migrate-job.yaml
 
         # 迁移
-        kubectl apply -f k8s/identity-db-migrate-job.yaml
-        kubectl apply -f k8s/merchant-db-migrate-job.yaml
+        kubectl apply -f build/k8s/identity-db-migrate-job.yaml
+        kubectl apply -f build/k8s/merchant-db-migrate-job.yaml
         kubectl wait --for=condition=complete job/merchant-db-migrate -n merchant --timeout=120s
         kubectl wait --for=condition=complete job/identity-db-migrate -n merchant --timeout=120s
 
         # 部署应用
-        kubectl apply -f k8s/06-identity-api.yaml
-        kubectl apply -f k8s/07-merchant-api.yaml
-        kubectl apply -f k8s/08-merchantadmin.yaml
-        kubectl apply -f k8s/ingress/08-ingress.yaml
+        kubectl apply -f build/k8s/06-identity-api.yaml
+        kubectl apply -f build/k8s/07-merchant-api.yaml
+        kubectl apply -f build/k8s/08-merchantadmin.yaml
+        kubectl apply -f build/k8s/09-nginx-ingress.yaml
 
         # 等待就绪
         kubectl wait --for=condition=ready pod -l app=identity-api -n merchant --timeout=120s

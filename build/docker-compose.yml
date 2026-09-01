@@ -75,7 +75,7 @@ services:
 
   identity-api:
     build:
-      context: ..                 # 项目根目录（含 src/）
+      context: .                  # 配合 --project-directory <repo-root>，永远相对于仓库根
       dockerfile: src/Identity.API/Dockerfile
     environment:
       - ConnectionStrings__Default=Server=sqlserver,1433;Database=MerchantAdmin.Identity;User Id=sa;Password=${SQLSERVER_SA_PASSWORD};TrustServerCertificate=True;
@@ -108,8 +108,8 @@ services:
 
   merchant-api:
     build:
-     context: ..                 # 项目根目录（含 src/）
-     dockerfile: src/MerchantAdmin.API/Dockerfile
+      context: .                  # 配合 --project-directory <repo-root>，永远相对于仓库根
+      dockerfile: src/MerchantAdmin.API/Dockerfile
     environment:
       - ConnectionStrings__Default=Server=sqlserver,1433;Database=MerchantAdmin.Merchant;User Id=sa;Password=${SQLSERVER_SA_PASSWORD};TrustServerCertificate=True;
       - Jwt__Issuer=${JWT_ISSUER}
@@ -140,7 +140,7 @@ services:
     
   payment-api:
     build:
-      context: ..
+      context: .                  # 配合 --project-directory <repo-root>，永远相对于仓库根
       dockerfile: src/Payment.API/Dockerfile
     image: payment-api:latest
     container_name: payment-api
@@ -154,8 +154,8 @@ services:
 
   frontend:
     build:
-     context: ..
-     dockerfile: src/MerchantAdmin.Frontend/Dockerfile
+      context: .                  # 配合 --project-directory <repo-root>，永远相对于仓库根
+      dockerfile: src/MerchantAdmin.Frontend/Dockerfile
     image: merchant-admin-frontend:latest
     container_name: frontend
     # 纯静态容器：不对外暴露端口，仅由统一入口 nginx（8081）通过内部网络访问
@@ -175,7 +175,7 @@ services:
     ports:
       - "8080:80"
     volumes:
-      - ../nginx.conf:/etc/nginx/nginx.conf
+      - ./nginx.conf:/etc/nginx/nginx.conf     # 配合 --project-directory <repo-root>，相对于仓库根
     depends_on:
       frontend:
         condition: service_started
@@ -191,7 +191,7 @@ services:
     
   merchant-migrator:
     build:
-      context: ..
+      context: .                       # 配合 --project-directory <repo-root>，永远相对于仓库根
       dockerfile: build/Dockerfile.migrate
     image: db-migrator:latest
     container_name: merchant-migrator
@@ -209,7 +209,7 @@ services:
 
   identity-migrator:
     build:
-      context: ..
+      context: .                       # 配合 --project-directory <repo-root>，永远相对于仓库根
       dockerfile: build/Dockerfile.migrate
     image: db-migrator:latest
     container_name: identity-migrator

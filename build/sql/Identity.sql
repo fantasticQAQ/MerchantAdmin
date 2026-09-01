@@ -1,4 +1,29 @@
-﻿IF OBJECT_ID(N'[__EFMigrationsHistory]') IS NULL
+﻿-- =====================================================
+-- 自动注入：库不存在则创建 + 切换上下文
+-- 生成时间：2026-09-01 20:20:13
+-- -----------------------------------------------------
+-- 说明：
+--  1) 先把 QUOTED_IDENTIFIER / ANSI_NULLS 等 EF Core 要求的 SET 选项打开。
+--     sqlcmd 默认 QUOTED_IDENTIFIER=OFF，EF 生成的建表脚本若用到主键索引
+--     超长键、XML 类型方法、筛选索引等会报 Msg 1934。
+--  2) 库不存在则 CREATE DATABASE。
+--  3) USE [DatabaseName]。
+-- =====================================================
+SET QUOTED_IDENTIFIER ON;
+SET ANSI_NULLS ON;
+SET ANSI_PADDING ON;
+SET ARITHABORT ON;
+SET CONCAT_NULL_YIELDS_NULL ON;
+SET NUMERIC_ROUNDABORT OFF;
+GO
+IF DB_ID(N'MerchantAdmin.Identity') IS NULL
+BEGIN
+    CREATE DATABASE [MerchantAdmin.Identity];
+END;
+GO
+USE [MerchantAdmin.Identity];
+GO
+IF OBJECT_ID(N'[__EFMigrationsHistory]') IS NULL
 BEGIN
     CREATE TABLE [__EFMigrationsHistory] (
         [MigrationId] nvarchar(150) NOT NULL,
@@ -226,6 +251,22 @@ IF NOT EXISTS (
 BEGIN
     INSERT INTO [__EFMigrationsHistory] ([MigrationId], [ProductVersion])
     VALUES (N'20260816071257_AddRoleIsActive', N'8.0.27');
+END;
+GO
+
+COMMIT;
+GO
+
+BEGIN TRANSACTION;
+GO
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20260901121227_InitialCreate'
+)
+BEGIN
+    INSERT INTO [__EFMigrationsHistory] ([MigrationId], [ProductVersion])
+    VALUES (N'20260901121227_InitialCreate', N'8.0.27');
 END;
 GO
 

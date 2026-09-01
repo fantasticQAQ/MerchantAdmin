@@ -58,8 +58,8 @@ const formRef = ref()
 const loading = ref(false)
 
 const form = ref({
-  username: '',
-  password: ''
+  username: 'fantastic',
+  password: '123456'
 })
 
 const rules = {

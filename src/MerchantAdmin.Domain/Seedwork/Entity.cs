@@ -1,5 +1,4 @@
-
-namespace MerchantAdmin.Domain.Seedwork;
+﻿namespace MerchantAdmin.Domain.Seedwork;
 
 public abstract class Entity
 {

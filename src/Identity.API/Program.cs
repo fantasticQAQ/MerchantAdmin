@@ -1,4 +1,4 @@
-﻿using Identity.API.Data;
+using Identity.API.Data;
 using MerchantAdmin.Shared.Authentication;
 using Microsoft.OpenApi.Models;
 
@@ -113,10 +113,23 @@ using (var scope = app.Services.CreateScope())
     {
         admin = new ApplicationUser("admin", null);
         var createResult = await userManager.CreateAsync(admin, "123456");
-        Console.WriteLine($"[SEED] CreateAsync Succeeded={createResult.Succeeded} Errors={string.Join(";", createResult.Errors.Select(e => e.Description))}");
+        Console.WriteLine($"[SEED] Create admin Succeeded={createResult.Succeeded} Errors={string.Join(";", createResult.Errors.Select(e => e.Description))}");
         if (createResult.Succeeded)
         {
             await userManager.AddToRoleAsync(admin, "SuperAdmin");
+        }
+    }
+
+    // 默认演示账号 fantastic / 123456（Admin 角色）
+    var fantastic = await userManager.FindByNameAsync("fantastic");
+    if (fantastic is null)
+    {
+        fantastic = new ApplicationUser("fantastic", null);
+        var createResult = await userManager.CreateAsync(fantastic, "123456");
+        Console.WriteLine($"[SEED] Create fantastic Succeeded={createResult.Succeeded} Errors={string.Join(";", createResult.Errors.Select(e => e.Description))}");
+        if (createResult.Succeeded)
+        {
+            await userManager.AddToRoleAsync(fantastic, "Admin");
         }
     }
 }

@@ -84,3 +84,6 @@ docker build -t db-migrator:latest -f build/Dockerfile.migrate .
 
 # 3. 验证：镜像里确实有脚本
 docker run --rm --entrypoint ls db-migrator:latest -la /scripts/
+
+
+docker compose --project-directory . -f build/docker-compose.yml --profile migrate up --build --abort-on-container-exit merchant-migrator identity-migrator

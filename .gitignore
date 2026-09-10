@@ -407,3 +407,7 @@ build/ci-progress.txt
 
 # Kubernetes Secretï¼ˆå«æ˜æ–‡æ•æ„Ÿä¿¡æ¯ï¼Œä¸è¦æäº¤åˆ° gitï¼‰
 build/k8s/05-secrets.yaml
+
+# AI: swagger ¹Ç¼Ü»º´æ£¨ÔËĞĞÊ±Éú³É£©
+AI/backend/**/.swagger-cache.json
+

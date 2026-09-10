@@ -9,8 +9,10 @@ import DOMPurify from 'dompurify'
 const TOKEN_KEY = 'merchant-ai:token'
 const SESSION_KEY = 'merchant-ai:sessionId'
 const MODE_KEY = 'merchant-ai:mode'
+const COLLAPSE_KEY = 'merchant-ai:collapsed'
 
-// ---- 登录�?----
+// ---------------------------------------------------------------- 登录态
+
 const token = ref(localStorage.getItem(TOKEN_KEY) || '')
 const currentUser = ref(null)
 const loginForm = reactive({ userName: '', password: '' })
@@ -18,36 +20,39 @@ const loginError = ref('')
 const loginLoading = ref(false)
 const booting = ref(true)
 
-// ---- AI 权限级别 ----
-// �?el-select 而不是原�?<select>：原�?<option> 的弹出列表由操作系统绘制<// CSS 完全管不到，永远是直�?+ 系统默认字体的白底方框，和整个界面割裂�?const permissionMode = ref(localStorage.getItem(MODE_KEY) || 'approve')
+// ---------------------------------------------------------------- AI 权限级别
+
+// 用 el-select 而不是原生 <select>：原生 option 的弹出列表由操作系统绘制，
+// CSS 完全管不到，永远是直角加系统默认字体的白底方框，和这套界面割裂。
+const permissionMode = ref(localStorage.getItem(MODE_KEY) || 'approve')
 
 const modeOptions = [
-  { value: 'readonly', label: '仅可查看', hint: '写操作一律拒绝 '},
+  { value: 'readonly', label: '仅可查看', hint: '写操作一律拒绝' },
   { value: 'approve', label: '需确认', hint: '写操作点确认后才执行（推荐）' },
-  { value: 'full', label: '完全权限', hint: '写操作直接执行，不再弹确认 '}
+  { value: 'full', label: '完全权限', hint: '写操作直接执行，不再弹确认' }
 ]
 const modeHints = Object.fromEntries(modeOptions.map((m) => [m.value, m.hint]))
 const currentMode = computed(
   () => modeOptions.find((m) => m.value === permissionMode.value) || modeOptions[1]
 )
 
-/** 统一�?Element Plus 的确认框，所有调用点不用关心它是怎么弹的�?*/
+/** 统一走 Element Plus 的确认框，所有调用点不用关心它是怎么弹的。 */
 async function askConfirm({ title, message, confirmText = '确定', danger = false }) {
   try {
     await ElMessageBox.confirm(message, title, {
       confirmButtonText: confirmText,
       cancelButtonText: '取消',
       type: danger ? 'warning' : 'info',
-      // 换行�?white-space: pre-line，ElMessageBox 默认会把 \n 吃掉
+      // 换行靠 white-space: pre-line，ElMessageBox 默认会把换行吃掉
       customClass: 'ai-confirm'
     })
     return true
   } catch (e) {
-    return false   // 取消 / 关闭都走 reject
+    return false // 取消 / 关闭都走 reject
   }
 }
 
-/** el-select 用的�?:model-value，所以点了取消不需要回�?—�?显示值一直跟着 permissionMode�?*/
+/** el-select 用的是 :model-value，点了取消不需要回滚，显示值一直跟着 permissionMode。 */
 async function changeMode(next) {
   if (!next || next === permissionMode.value) return
 
@@ -55,7 +60,7 @@ async function changeMode(next) {
     const ok = await askConfirm({
       title: '开启「完全权限」？',
       message:
-        'AI 的写操作（下单/ 删单 / 改商品/ 退款…）会不经确认直接执行，' +
+        'AI 的写操作（下单 / 删单 / 改商品 / 退款…）会不经确认直接执行，' +
         '点错一次就没有挽回余地。\n\n建议只在批量操作时临时开启，用完切回「需确认」。',
       confirmText: '我明白，开启',
       danger: true
@@ -67,15 +72,9 @@ async function changeMode(next) {
   localStorage.setItem(MODE_KEY, next)
 }
 
-// ---- 对话 ----
-const messages = ref([]) // { role, text, html?, pending: [{actionId, summary}] | null }
-const input = ref('')
-const loading = ref(false)
-const sessionId = ref('')
-const listEl = ref(null)
+// ---------------------------------------------------------------- 主视图状态
 
-// ---- 主视图：会话 / 轨迹 ----
-// 左侧永远是会话列表；顶部两个页签切换右侧显示「对话」还是「这个会话的轨迹」�?const view = ref('chat') // 'chat' | 'trace'
+const view = ref('chat') // 'chat' | 'trace'
 const sessions = ref([])
 const groups = ref([])
 const sessionsLoading = ref(false)
@@ -83,12 +82,18 @@ const traceEntries = ref([])
 const traceLoading = ref(false)
 const expanded = ref({}) // 轨迹条目的展开状态，按索引存
 const panelError = ref('')
-/** 新建会话时它该落进哪个分组（会话要等第一条消息发出去才真正存在，所以先记在这儿）�?*/
+/** 新建会话时它该落进哪个分组（会话要等第一条消息发出去才真正存在，所以先记在这儿）。 */
 const pendingGroupId = ref(null)
 
-// ---- 分组的折叠状态（像目录树那样�?---
-// �?localStorage：折叠是"我怎么看这个列�?的偏好，刷新一次就全展开会很难受�?const COLLAPSE_KEY = 'merchant-ai:collapsed'
+const messages = ref([]) // { role, text, html?, pending: [{actionId, summary}] | null }
+const input = ref('')
+const loading = ref(false)
+const sessionId = ref('')
+const listEl = ref(null)
 
+// ---------------------------------------------------------------- 分组折叠
+
+// 存 localStorage：折叠是「我怎么看这个列表」的偏好，刷新一次就全展开会很难受。
 const collapsedSections = ref(new Set(readCollapsed()))
 
 function readCollapsed() {
@@ -104,6 +109,14 @@ function isCollapsed(id) {
   return collapsedSections.value.has(id)
 }
 
+function persistCollapsed(set) {
+  try {
+    localStorage.setItem(COLLAPSE_KEY, JSON.stringify([...set]))
+  } catch (e) {
+    // 存不进去只影响下次打开时的展开状态，不值得打断用户
+  }
+}
+
 function toggleCollapse(id) {
   // 换一个新 Set 而不是原地改：ref 里放 Set 时原地改不会触发更新
   const next = new Set(collapsedSections.value)
@@ -114,27 +127,9 @@ function toggleCollapse(id) {
   persistCollapsed(next)
 }
 
-function persistCollapsed(set) {
-  try {
-    localStorage.setItem(COLLAPSE_KEY, JSON.stringify([...set]))
-  } catch (e) {
-    // 存不进去只影响下次打开时的展开状态，不值得打断用户
-  }
-}
+// ---------------------------------------------------------------- 列表分区
 
-/** 一键全部折�?展开（以「是否还有没折的」来定方向，和常见的目录树一致）�?*/
-const allCollapsed = computed(() => {
-  const ids = allSections.value.map((s) => s.id)
-  return ids.length > 0 && ids.every((id) => collapsedSections.value.has(id))
-})
-
-function toggleAllCollapsed() {
-  const next = allCollapsed.value ? new Set() : new Set(allSections.value.map((s) => s.id))
-  collapsedSections.value = next
-  persistCollapsed(next)
-}
-
-/** 搜索框过滤（按标题）�?*/
+/** 搜索框按标题过滤。 */
 const searchText = ref('')
 
 const visibleSessions = computed(() => {
@@ -143,10 +138,10 @@ const visibleSessions = computed(() => {
   return sessions.value.filter((s) => (s.title || '').toLowerCase().includes(q))
 })
 
-/** 置顶的会话从各自分组里拎出来，单独排在最上面�?*/
+/** 置顶的会话从各自分组里拎出来，单独排在最上面。 */
 const pinnedSessions = computed(() => visibleSessions.value.filter((s) => s.pinned))
 
-/** 分组区：分组（置顶的在前�? 末尾一个「未分组」。空分组也保留，否则用户建完就找不到了�?*/
+/** 分组区：分组（置顶的在前）+ 末尾一个「未分组」。空分组也保留，否则用户建完就找不到了。 */
 const groupedSections = computed(() => {
   const rest = visibleSessions.value.filter((s) => !s.pinned)
 
@@ -172,7 +167,7 @@ const groupedSections = computed(() => {
   return sections
 })
 
-/** 页面上所有可拖放的区（含置顶区），拖动时�?id 找目标�?*/
+/** 页面上所有可拖放的区（含置顶区），拖动时按 id 找目标。 */
 const allSections = computed(() => {
   const pinned = {
     id: '__pinned__',
@@ -184,9 +179,23 @@ const allSections = computed(() => {
   return pinnedSessions.value.length ? [pinned, ...groupedSections.value] : groupedSections.value
 })
 
-// ---- 拖动排序 ----
-// 用原�?HTML5 拖放：只是列表内重排，为这个引一个拖拽库不划算�?const dragSession = ref(null)
-const dropHint = ref(null) // { sessionId, position: 'before' | 'after' }
+/** 一键全部折叠/展开（以「是否还有没折的」来定方向，和常见的目录树一致）。 */
+const allCollapsed = computed(() => {
+  const ids = allSections.value.map((s) => s.id)
+  return ids.length > 0 && ids.every((id) => collapsedSections.value.has(id))
+})
+
+function toggleAllCollapsed() {
+  const next = allCollapsed.value ? new Set() : new Set(allSections.value.map((s) => s.id))
+  collapsedSections.value = next
+  persistCollapsed(next)
+}
+
+// ---------------------------------------------------------------- 拖动排序
+
+// 用原生 HTML5 拖放：只是列表内重排，为这个引一个拖拽库不划算。
+const dragSession = ref(null)
+const dropHint = ref(null) // { sectionId, sessionId, position }
 
 function onDragStart(s) {
   dragSession.value = s
@@ -200,7 +209,8 @@ function onDragEnd() {
 function onDragOver(target, sectionId) {
   if (!dragSession.value) return
   if (!target) {
-    // 落在空白�?= 追加到这个区的末�?    dropHint.value = { sectionId, sessionId: null, position: 'end' }
+    // 落在空白处 = 追加到这个区的末尾
+    dropHint.value = { sectionId, sessionId: null, position: 'end' }
     return
   }
   if (target.sessionId === dragSession.value.sessionId) {
@@ -210,7 +220,7 @@ function onDragOver(target, sectionId) {
   dropHint.value = { sectionId, sessionId: target.sessionId, position: 'before' }
 }
 
-/** 算一�?拖到这儿之后这个区的新顺�?，返�?null 表示这次拖动无效�?*/
+/** 算一次「拖到这儿之后这个区的新顺序」，返回 null 表示这次拖动无效。 */
 function computeNewOrder(section, target) {
   const dragged = dragSession.value
   if (!dragged || !section) return null
@@ -218,12 +228,37 @@ function computeNewOrder(section, target) {
   const ids = section.items.map((s) => s.sessionId).filter((id) => id !== dragged.sessionId)
   const at = target ? ids.indexOf(target.sessionId) : -1
 
-  if (at < 0) ids.push(dragged.sessionId) // 落在空白�?�?放到最�?  else ids.splice(at, 0, dragged.sessionId)
+  if (at < 0) ids.push(dragged.sessionId) // 落在空白处，放到最后
+  else ids.splice(at, 0, dragged.sessionId)
 
   return ids
 }
 
-/** 把会话挪到目标区（跨区时才需要改归属；置顶区�?pinned 表示）�?*/
+async function patchSession(id, body) {
+  try {
+    await api(`/api/ai/sessions/${encodeURIComponent(id)}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    })
+  } catch (e) {
+    if (e.message !== 'UNAUTHORIZED') panelError.value = '移动会话失败：' + e.message
+  }
+}
+
+async function persistOrder(sessionIds) {
+  try {
+    await api('/api/ai/sessions/order', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ sessionIds })
+    })
+  } catch (e) {
+    if (e.message !== 'UNAUTHORIZED') panelError.value = '保存顺序失败：' + e.message
+  }
+}
+
+/** 把会话挪到目标区（跨区时才需要改归属；置顶区靠 pinned 表示）。 */
 async function moveToSection(session, sectionId) {
   if (sectionId === '__pinned__') {
     if (!session.pinned) await patchSession(session.sessionId, { pinned: true })
@@ -236,30 +271,6 @@ async function moveToSection(session, sectionId) {
 
   const moved = session.pinned || (session.groupId || '') !== (body.groupId || '')
   if (moved) await patchSession(session.sessionId, body)
-}
-
-async function patchSession(id, body) {
-  try {
-    await api(`/api/ai/sessions/${encodeURIComponent(id)}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body)
-    })
-  } catch (e) {
-    if (e.message !== 'UNAUTHORIZED') panelError.value = '移动会话失败： + e.message
-  }
-}
-
-async function persistOrder(sessionIds) {
-  try {
-    await api('/api/ai/sessions/order', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ sessionIds })
-    })
-  } catch (e) {
-    if (e.message !== 'UNAUTHORIZED') panelError.value = '保存顺序失败： + e.message
-  }
 }
 
 async function onDrop(target, sectionId) {
@@ -276,15 +287,17 @@ async function onDrop(target, sectionId) {
   await loadSessions()
 }
 
-/** 拖到分组标题下的空白�?= 挪进这个分组并排到最后�?*/
+/** 拖到分组标题下的空白区 = 挪进这个分组并排到最后。 */
 async function onDropSection(section) {
   if (!dropHint.value || dropHint.value.sectionId !== section.id) return
   await onDrop(null, section.id)
 }
 
+// ---------------------------------------------------------------- 通用
+
 marked.setOptions({ breaks: true, gfm: true })
 
-/** 模型输出是不可信内容，渲染成 HTML 之前必须 sanitize�?*/
+/** 模型输出是不可信内容，渲染成 HTML 之前必须 sanitize。 */
 function renderMarkdown(text) {
   try {
     return DOMPurify.sanitize(marked.parse(text || ''))
@@ -299,51 +312,6 @@ function scrollToBottom() {
   })
 }
 
-// ---- 右侧消息刻度�?----
-// 每渲染一条消息就找一下当前滚到哪条。消息数不多（几十条），遍历一次的开销可以忽略<// 真到几百条再考虑�?IntersectionObserver�?const activeMessage = ref(0)
-
-/** 只给我自己发的消息打�?—�?AI 的回复一条接一条，全打上就成一堵墙了，反而找不到定位�?*/
-const userTicks = computed(() =>
-  messages.value
-    .map((m, index) => ({ m, index }))
-    .filter((x) => x.m.role === 'user')
-    .map((x) => ({ index: x.index, text: (x.m.text || '').slice(0, 40) || '你的提问' }))
-)
-
-/** 当前看的这段里，最后一条属于我的提问�?*/
-const activeTick = computed(() => {
-  let active = 0
-  userTicks.value.forEach((t, k) => {
-    if (t.index <= activeMessage.value) active = k
-  })
-  return active
-})
-
-function onListScroll() {
-  const el = listEl.value
-  if (!el) return
-
-  const rows = el.querySelectorAll('.row')
-  if (rows.length === 0) return
-
-  const top = el.scrollTop
-  let index = 0
-  rows.forEach((row, i) => {
-    if (row.offsetTop - el.offsetTop <= top + 48) index = i
-  })
-  activeMessage.value = index
-}
-
-function scrollToMessage(index) {
-  const el = listEl.value
-  if (!el) return
-  const row = el.querySelectorAll('.row')[index]
-  if (!row) return
-
-  el.scrollTo({ top: Math.max(0, row.offsetTop - el.offsetTop - 16), behavior: 'smooth' })
-  activeMessage.value = index
-}
-
 function pushAi(text, pending = null) {
   messages.value.push({ role: 'ai', text: text || '', html: renderMarkdown(text), pending })
 }
@@ -354,7 +322,7 @@ function rememberSession(id) {
   else localStorage.removeItem(SESSION_KEY)
 }
 
-/** 统一带上 Bearer�?01 一律当作登录失效，回到登录页�?*/
+/** 统一带上 Bearer；401 一律当作登录失效，回到登录页。 */
 async function api(path, options = {}) {
   const headers = { ...(options.headers || {}) }
   if (token.value) headers.Authorization = `Bearer ${token.value}`
@@ -362,7 +330,7 @@ async function api(path, options = {}) {
   const res = await fetch(path, { ...options, headers })
 
   if (res.status === 401) {
-    logout('登录已过期，请重新登录)
+    logout('登录已过期，请重新登录')
     throw new Error('UNAUTHORIZED')
   }
   return res
@@ -372,14 +340,18 @@ async function jsonBody(res, fallback = {}) {
   return await res.json().catch(() => fallback)
 }
 
-function formatTime(value) {
-  if (!value) return '时间未知'
+/** 轨迹时间戳要带上日期，一个会话可能跨天。 */
+function formatStamp(value) {
+  if (!value) return ''
   const d = new Date(value)
-  if (Number.isNaN(d.getTime())) return '时间未知'
-  const sameDay = d.toDateString() === new Date().toDateString()
-  return sameDay
-    ? d.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
-    : d.toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })
+  if (Number.isNaN(d.getTime())) return ''
+  return d.toLocaleString('zh-CN', {
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit'
+  })
 }
 
 // ---------------------------------------------------------------- 登录
@@ -417,7 +389,8 @@ function logout(message) {
   token.value = ''
   currentUser.value = null
   localStorage.removeItem(TOKEN_KEY)
-  // 下一个人用这台机器时，不该继承上一个人的会�?  localStorage.removeItem(SESSION_KEY)
+  // 下一个人用这台机器时，不该继承上一个人的会话
+  localStorage.removeItem(SESSION_KEY)
   sessionId.value = ''
   messages.value = []
   sessions.value = []
@@ -429,7 +402,8 @@ function logout(message) {
 // ---------------------------------------------------------------- 启动
 
 async function bootstrap() {
-  // 先确�?token 还有效，并拿到当前用�?  const meRes = await api('/api/ai/me')
+  // 先确认 token 还有效，并拿到当前用户
+  const meRes = await api('/api/ai/me')
   if (!meRes.ok) return
   currentUser.value = await jsonBody(meRes)
 
@@ -437,7 +411,6 @@ async function bootstrap() {
 
   const saved = localStorage.getItem(SESSION_KEY)
   if (!saved) return
-
   await loadSession(saved, { silent: true })
 }
 
@@ -453,7 +426,7 @@ async function loadSessions() {
       groups.value = data.groups || []
     }
   } catch (e) {
-    if (e.message !== 'UNAUTHORIZED') panelError.value = '加载会话列表失败： + e.message
+    if (e.message !== 'UNAUTHORIZED') panelError.value = '加载会话列表失败：' + e.message
   } finally {
     sessionsLoading.value = false
   }
@@ -464,7 +437,7 @@ const viewOptions = [
   { label: '轨迹', value: 'trace' }
 ]
 
-/** 页签切换。切到轨迹页要先把这个会话的轨迹拉下来�?*/
+/** 页签切换。切到轨迹页要先把这个会话的轨迹拉下来。 */
 function switchView(next) {
   view.value = next
   if (next === 'trace') loadTrace()
@@ -501,7 +474,7 @@ async function loadSession(id, { silent = false } = {}) {
     messages.value = []
 
     for (const m of data.messages || []) {
-      // 聊天视图只显示用户输入和助手回复；工具调�?结果留给「审计轨迹」看
+      // 聊天视图只显示用户输入和助手回复；工具调用/结果留给「审计轨迹」看
       if (m.role === 'user' && m.text) {
         messages.value.push({ role: 'user', text: m.text })
       } else if (m.role === 'assistant' && m.text) {
@@ -519,7 +492,7 @@ async function loadSession(id, { silent = false } = {}) {
       })
     }
   } catch (e) {
-    if (e.message !== 'UNAUTHORIZED') panelError.value = '加载会话失败： + e.message
+    if (e.message !== 'UNAUTHORIZED') panelError.value = '加载会话失败：' + e.message
   } finally {
     loading.value = false
     scrollToBottom()
@@ -537,10 +510,11 @@ function resetSession() {
 
 async function removeSession(s) {
   const id = s.sessionId ?? s
-  // 提示是给店主看的，不是给开发看的：说清"删了会怎样"就够了，
-  // 不用交代软删除、Redis、审计留痕这些实现细节�?  const ok = await askConfirm({
-    title: '删除这个会话？,
-    message: '删除后，这个会话和它的审计轨迹都不再显示。,
+  // 提示是给店主看的，不是给开发看的：说清「删了会怎样」就够了，
+  // 不用交代软删除、存储实现、审计留痕这些细节。
+  const ok = await askConfirm({
+    title: '删除这个会话？',
+    message: '删除后，这个会话和它的审计轨迹都不再显示。',
     confirmText: '删除',
     danger: true
   })
@@ -550,19 +524,19 @@ async function removeSession(s) {
     const res = await api(`/api/ai/sessions/${encodeURIComponent(id)}`, { method: 'DELETE' })
     const data = await jsonBody(res)
     if (!res.ok) {
-      panelError.value = data.message || `移除失败（HTTP ${res.status}）`
+      panelError.value = data.message || `删除失败（HTTP ${res.status}）`
       return
     }
     sessions.value = sessions.value.filter((x) => x.sessionId !== id)
     if (sessionId.value === id) newSession()
   } catch (e) {
-    if (e.message !== 'UNAUTHORIZED') panelError.value = '移除失败：' + e.message
+    if (e.message !== 'UNAUTHORIZED') panelError.value = '删除失败：' + e.message
   }
 }
 
-// ---------------------------------------------------------------- 重命</ 置顶 / 分组
+// ---------------------------------------------------------------- 重命名 / 置顶 / 分组
 
-/** 弹一个输入框。用户取消时返回 null�?*/
+/** 弹一个输入框。用户取消时返回 null。 */
 async function askText({ title, message, value = '', maxlength = 40 }) {
   try {
     const result = await ElMessageBox.prompt(message, title, {
@@ -572,7 +546,7 @@ async function askText({ title, message, value = '', maxlength = 40 }) {
       inputValidator: (v) => {
         const text = (v || '').trim()
         if (!text) return '不能为空'
-        if (text.length > maxlength) return `最长${maxlength} 个字符`
+        if (text.length > maxlength) return `最长 ${maxlength} 个字符`
         return true
       }
     })
@@ -582,12 +556,12 @@ async function askText({ title, message, value = '', maxlength = 40 }) {
   }
 }
 
-/** 改会话的名字。改完标记为手动命名，之后模型就不会再自动覆盖它了�?*/
+/** 改会话的名字。改完标记为手动命名，之后模型就不会再自动覆盖它了。 */
 async function renameSession(s) {
   const title = await askText({
-    title: '重命名会话,
+    title: '重命名会话',
     message: '给这个会话起个好认的名字',
-    value: s.title === '（空会话） ? '' : s.title
+    value: s.title === '（空会话）' ? '' : s.title
   })
   if (!title) return
 
@@ -599,7 +573,7 @@ async function renameSession(s) {
     })
     if (!res.ok) {
       const data = await jsonBody(res)
-      panelError.value = data.message || '?
+      panelError.value = data.message || '重命名失败'
       return
     }
     sessions.value = sessions.value.map((x) => (x.sessionId === s.sessionId ? { ...x, title } : x))
@@ -619,12 +593,12 @@ async function togglePinSession(s) {
     if (!res.ok) return
     sessions.value = sessions.value.map((x) => (x.sessionId === s.sessionId ? { ...x, pinned } : x))
   } catch (e) {
-    if (e.message !== 'UNAUTHORIZED') panelError.value = '置顶失败： + e.message
+    if (e.message !== 'UNAUTHORIZED') panelError.value = '置顶失败：' + e.message
   }
 }
 
 async function createGroup() {
-  const name = await askText({ title: '新建分组', message: '给分组起个名字, maxlength: 20 })
+  const name = await askText({ title: '新建分组', message: '给分组起个名字', maxlength: 20 })
   if (!name) return
 
   try {
@@ -640,18 +614,8 @@ async function createGroup() {
     }
     await loadSessions()
   } catch (e) {
-    if (e.message !== 'UNAUTHORIZED') panelError.value = '新建分组失败： + e.message
+    if (e.message !== 'UNAUTHORIZED') panelError.value = '新建分组失败：' + e.message
   }
-}
-
-async function renameGroup(sec) {
-  const name = await askText({ title: '重命名分组, message: '给分组起个新名字', value: sec.name, maxlength: 20 })
-  if (!name) return
-  await patchGroup(sec.id, { name })
-}
-
-async function toggleGroupPin(sec) {
-  await patchGroup(sec.id, { pinned: !sec.pinned })
 }
 
 async function patchGroup(groupId, body) {
@@ -668,14 +632,29 @@ async function patchGroup(groupId, body) {
     }
     await loadSessions()
   } catch (e) {
-    if (e.message !== 'UNAUTHORIZED') panelError.value = '分组操作失败： + e.message
+    if (e.message !== 'UNAUTHORIZED') panelError.value = '分组操作失败：' + e.message
   }
+}
+
+async function renameGroup(sec) {
+  const name = await askText({
+    title: '重命名分组',
+    message: '给分组起个新名字',
+    value: sec.name,
+    maxlength: 20
+  })
+  if (!name) return
+  await patchGroup(sec.id, { name })
+}
+
+async function toggleGroupPin(sec) {
+  await patchGroup(sec.id, { pinned: !sec.pinned })
 }
 
 async function deleteGroup(sec) {
   const ok = await askConfirm({
     title: `删除分组「${sec.name}」？`,
-    message: `组里的${sec.items.length} 个会话不会被删除，只是回到「未分组」。`,
+    message: `组里的 ${sec.items.length} 个会话不会被删除，只是回到「未分组」。`,
     confirmText: '删除分组',
     danger: true
   })
@@ -690,11 +669,11 @@ async function deleteGroup(sec) {
     }
     await loadSessions()
   } catch (e) {
-    if (e.message !== 'UNAUTHORIZED') panelError.value = '删除分组失败： + e.message
+    if (e.message !== 'UNAUTHORIZED') panelError.value = '删除分组失败：' + e.message
   }
 }
 
-/** 分组三点菜单统一入口 —�?菜单项和操作一一对应，加一项只改这儿和模板�?*/
+/** 分组三点菜单统一入口，菜单项和操作一一对应，加一项只改这儿和模板。 */
 function onGroupCommand(cmd, sec) {
   if (cmd === 'new') newSessionInGroup(sec)
   else if (cmd === 'rename') renameGroup(sec)
@@ -702,14 +681,14 @@ function onGroupCommand(cmd, sec) {
   else if (cmd === 'delete') deleteGroup(sec)
 }
 
-/** 在这个分组里开一个新会话。会话要等第一条消息发出去才真正存在，所以先记着分组 id�?*/
+/** 在这个分组里开一个新会话。会话要等第一条消息发出去才真正存在，所以先记着分组 id。 */
 function newSessionInGroup(sec) {
   resetSession()
   view.value = 'chat'
   pendingGroupId.value = sec.id
 }
 
-/** 会话刚被创建出来时，把它落到之前选好的分组里�?*/
+/** 会话刚被创建出来时，把它落到之前选好的分组里。 */
 async function applyPendingGroup(id) {
   const groupId = pendingGroupId.value
   pendingGroupId.value = null
@@ -726,9 +705,12 @@ async function applyPendingGroup(id) {
   }
 }
 
-// ---------------------------------------------------------------- 轨迹（按会话�?
-// 轨迹不提供单独删�?—�?它是会话的审计记录，跟着会话一起走<// 删掉会话，它的轨迹也就不再展示了；单独把轨迹抹掉只会让审计链断掉�?
-/** 拉当前会话的轨迹。后端按时间正序返回，读起来就是一条流程�?*/
+// ---------------------------------------------------------------- 轨迹（按会话）
+
+// 轨迹不提供单独删除，它是会话的审计记录，跟着会话一起走。
+// 删掉会话，它的轨迹也就不再展示了；单独把轨迹抹掉只会让审计链断掉。
+
+/** 拉当前会话的轨迹。后端按时间正序返回，读起来就是一条流程。 */
 async function loadTrace() {
   if (!sessionId.value) {
     traceEntries.value = []
@@ -739,12 +721,14 @@ async function loadTrace() {
   panelError.value = ''
   expanded.value = {}
   try {
-    const res = await api(`/api/ai/traces?sessionId=${encodeURIComponent(sessionId.value)}&limit=2000`)
+    const res = await api(
+      `/api/ai/traces?sessionId=${encodeURIComponent(sessionId.value)}&limit=2000`
+    )
     const data = await jsonBody(res)
     if (res.ok) traceEntries.value = data.entries || []
     else panelError.value = data.message || '加载轨迹失败'
   } catch (e) {
-    if (e.message !== 'UNAUTHORIZED') panelError.value = '加载轨迹失败： + e.message
+    if (e.message !== 'UNAUTHORIZED') panelError.value = '加载轨迹失败：' + e.message
   } finally {
     traceLoading.value = false
   }
@@ -760,7 +744,7 @@ const eventLabel = {
   tool_post: '工具返回',
   tool_denied: '角色不足',
   tool_blocked: '策略拦截',
-  approval_pending: '登记待确认,
+  approval_pending: '登记待确认',
   approval_invalid: '参数被拒',
   approval_denied: '越权确认',
   approval_cancelled: '取消操作',
@@ -773,7 +757,49 @@ const eventLabel = {
   answer: '回答'
 }
 
-/** 轨迹页的筛选：默认「全部」，其余按类型收窄�?*/
+/** 事件归类，只用来决定时间线上那颗点的颜色。 */
+function eventKind(type) {
+  if (type === 'user_input') return 'input'
+  if (type === 'answer') return 'answer'
+  if (type === 'approval_pending') return 'pending'
+  if (type === 'tool_pre' || type === 'tool_post') return 'tool'
+  if (
+    type === 'tool_denied' ||
+    type === 'tool_blocked' ||
+    type === 'loop_guard' ||
+    type === 'approval_invalid' ||
+    type === 'approval_denied' ||
+    type === 'agent_error' ||
+    type === 'agent_timeout'
+  ) {
+    return 'warn'
+  }
+  return 'other'
+}
+
+/** el-timeline 圆点的颜色 */
+const kindColors = {
+  input: '#3b82f6',
+  answer: '#10b981',
+  tool: '#0ea5e9',
+  pending: '#f59e0b',
+  warn: '#ef4444',
+  other: '#cbd5e1'
+}
+const traceColor = (type) => kindColors[eventKind(type)]
+
+/** el-tag 的类型。Element Plus 没有 cyan，工具类用 primary 代替。 */
+const kindTagTypes = {
+  input: 'primary',
+  answer: 'success',
+  tool: 'info',
+  pending: 'warning',
+  warn: 'danger',
+  other: 'info'
+}
+const traceTagType = (type) => kindTagTypes[eventKind(type)]
+
+/** 轨迹页的筛选：默认「全部」，其余按类型收窄。 */
 const traceFilters = [
   { value: 'all', label: '全部' },
   { value: 'tool', label: '工具调用' },
@@ -794,7 +820,10 @@ const visibleTraces = computed(() => {
 })
 
 /**
- * 轨迹页顶部那一排体检数据�? * 「本轮耗时」事件是专门为此加的 —�?它带 durationMs �?token 用量，光看事件条数是看不出慢在哪的�? */
+ * 轨迹页顶部那一排体检数据。
+ * 「本轮耗时」事件是专门为此加的，它带 durationMs 和 token 用量，
+ * 光看事件条数是看不出慢在哪的。
+ */
 const traceStats = computed(() => {
   const list = traceEntries.value
   const sums = list.filter((e) => e.eventType === 'turn_summary')
@@ -821,70 +850,14 @@ const traceStats = computed(() => {
   }
 
   return {
+    turns: sums.length,
     toolCalls: list.filter((e) => e.eventType === 'tool_post').length,
     approvals: list.filter((e) => e.eventType === 'approval_pending').length,
     blocked: list.filter((e) => eventKind(e.eventType) === 'warn').length,
-    turns: sums.length,
     durationText: durationMs > 0 ? (durationMs / 1000).toFixed(1) + 's' : '—',
-    tokenText: hasTokens ? tokens.toLocaleString('zh-CN') : '?
+    tokenText: hasTokens ? tokens.toLocaleString('zh-CN') : '—'
   }
 })
-
-/** 事件归类，只用来决定时间线上那颗点的颜色�?*/
-function eventKind(type) {
-  if (type === 'user_input') return 'input'
-  if (type === 'answer') return 'answer'
-  if (type === 'approval_pending') return 'pending'
-  if (type === 'tool_pre' || type === 'tool_post') return 'tool'
-  if (
-    type === 'tool_denied' ||
-    type === 'tool_blocked' ||
-    type === 'loop_guard' ||
-    type === 'approval_invalid' ||
-    type === 'approval_denied' ||
-    type === 'agent_error' ||
-    type === 'agent_timeout'
-  ) {
-    return 'warn'
-  }
-  return 'other'
-}
-
-/** el-timeline 圆点的颜�?*/
-const kindColors = {
-  input: '#3b82f6',
-  answer: '#10b981',
-  tool: '#0ea5e9',
-  pending: '#f59e0b',
-  warn: '#ef4444',
-  other: '#cbd5e1'
-}
-const traceColor = (type) => kindColors[eventKind(type)]
-
-/** el-tag 的类型。Element Plus 没有 cyan，工具类�?primary 代替�?*/
-const kindTagTypes = {
-  input: 'primary',
-  answer: 'success',
-  tool: 'info',
-  pending: 'warning',
-  warn: 'danger',
-  other: 'info'
-}
-const traceTagType = (type) => kindTagTypes[eventKind(type)]
-
-/** 轨迹时间戳要带上日期 —�?一个会话可能跨�?*/
-function formatStamp(value) {
-  if (!value) return ''
-  const d = new Date(value)
-  if (Number.isNaN(d.getTime())) return ''
-  return d.toLocaleString('zh-CN', {
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit'
-  })
-}
 
 function summarizePayload(payload) {
   if (payload === null || payload === undefined) return ''
@@ -892,7 +865,7 @@ function summarizePayload(payload) {
   return text.length > 180 ? text.slice(0, 180) + '…' : text
 }
 
-/** 展开时把 JSON 排版好再显示，一行糊在一起的 payload 根本读不了�?*/
+/** 展开时把 JSON 排版好再显示，一行糊在一起的 payload 根本读不了。 */
 function prettyPayload(payload) {
   if (payload === null || payload === undefined) return ''
   if (typeof payload === 'string') {
@@ -905,19 +878,71 @@ function prettyPayload(payload) {
   return JSON.stringify(payload, null, 2)
 }
 
-/** 轨迹页头显示当前会话的标题。列表还没加载出来时退回第一条用户消息�?*/
+/** 页头显示当前会话的标题。列表还没加载出来时退回第一条用户消息。 */
 const sessionTitle = computed(() => {
   const found = sessions.value.find((s) => s.sessionId === sessionId.value)
   if (found) return found.title
   const first = messages.value.find((m) => m.role === 'user' && m.text)
-  return first ? first.text.slice(0, 24) : '（新会话）
+  return first ? first.text.slice(0, 24) : '（新会话）'
 })
 
 // ---------------------------------------------------------------- 对话
 
-// 一次用户输入可能要跑很久（「建 1000 个商品」≈ 17 �?× 60 次工具调用）<// 后端每轮有调用额度，跑满就把 hasMore 交回来；这里自动再发一轮，
-// 用户不用手打「继续」。每轮都是独立的短请求，不会把单�?HTTP 请求拖到超时�?const MAX_AUTO_ROUNDS = 40
+// 一次用户输入可能要跑很久（「建 1000 个商品」约 17 轮乘 60 次工具调用）。
+// 后端每轮有调用额度，跑满就把 hasMore 交回来；这里自动再发一轮，
+// 用户不用手打「继续」。每轮都是独立的短请求，不会把单个 HTTP 请求拖到超时。
+const MAX_AUTO_ROUNDS = 40
 const autoRound = ref(0)
+
+// ---- 右侧消息刻度条 ----
+
+// 每渲染一条消息就找一下当前滚到哪条。消息数不多（几十条），遍历一次的开销可以忽略；
+// 真到几百条再考虑用 IntersectionObserver。
+const activeMessage = ref(0)
+
+/** 只给我自己发的消息打点，AI 的回复一条接一条，全打上就成一堵墙了，反而找不到定位。 */
+const userTicks = computed(() =>
+  messages.value
+    .map((m, index) => ({ m, index }))
+    .filter((x) => x.m.role === 'user')
+    .map((x) => ({ index: x.index, text: (x.m.text || '').slice(0, 40) || '你的提问' }))
+)
+
+/** 当前看的这段里，最后一条属于我的提问。 */
+const activeTick = computed(() => {
+  let active = 0
+  userTicks.value.forEach((t, k) => {
+    if (t.index <= activeMessage.value) active = k
+  })
+  return active
+})
+
+function onListScroll() {
+  const el = listEl.value
+  if (!el) return
+
+  const rows = el.querySelectorAll('.row')
+  if (rows.length === 0) return
+
+  const top = el.scrollTop
+  let index = 0
+  rows.forEach((row, i) => {
+    if (row.offsetTop - el.offsetTop <= top + 48) index = i
+  })
+  activeMessage.value = index
+}
+
+function scrollToMessage(index) {
+  const el = listEl.value
+  if (!el) return
+  const row = el.querySelectorAll('.row')[index]
+  if (!row) return
+
+  el.scrollTo({ top: Math.max(0, row.offsetTop - el.offsetTop - 16), behavior: 'smooth' })
+  activeMessage.value = index
+}
+
+// ---- 发送 ----
 
 async function send() {
   const text = input.value.trim()
@@ -931,16 +956,18 @@ async function send() {
   try {
     await runChat(text)
   } catch (e) {
-    if (e.message !== 'UNAUTHORIZED') pushAi('网络错误： + e.message)
+    if (e.message !== 'UNAUTHORIZED') pushAi('网络错误：' + e.message)
   } finally {
     loading.value = false
     autoRound.value = 0
     scrollToBottom()
-    // 新会话、标题、消息数、轨迹条数都会变，顺手刷新左侧列�?    loadSessions()
+    // 新会话、标题、消息数、轨迹条数都会变，顺手刷新左侧列表
+    loadSessions()
   }
 }
 
-// 一</chat 请求。返回后端响应体；HTTP 不成功时把错误显示出来并返回 null�?async function postChat(message, auto) {
+/** 一轮 /chat 请求。返回后端响应体；HTTP 不成功时把错误显示出来并返回 null。 */
+async function postChat(message, auto) {
   const res = await api('/api/ai/chat', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -959,27 +986,36 @@ async function send() {
   return data
 }
 
-// 把一轮响应显示出来，返回这轮的待确认卡片（没有就�?null�?function applyChatResult(data) {
+/** 把一轮响应显示出来，返回这轮的待确认卡片（没有就是 null）。 */
+function applyChatResult(data) {
   if (data.sessionId && data.sessionId !== sessionId.value) {
     rememberSession(data.sessionId)
-    // 新会话刚诞生，如果之前是「在某分组里新建」，这会儿把它落进那个分�?    applyPendingGroup(data.sessionId)
+    // 新会话刚诞生，如果之前是「在某分组里新建」，这会儿把它落进那个分组
+    applyPendingGroup(data.sessionId)
   }
+
   const pending = data.pendingActions?.length
     ? data.pendingActions
-    : (data.pendingAction ? [data.pendingAction] : null)
+    : data.pendingAction
+      ? [data.pendingAction]
+      : null
   pushAi(data.reply, pending)
 
-  // 模型给会话起了个新标�?—�?列表里立刻换掉，不用等这轮全部跑�?  if (data.title) {
+  // 模型给会话起了个新标题，列表里立刻换掉，不用等这轮全部跑完
+  if (data.title) {
     const id = data.sessionId || sessionId.value
     if (sessions.value.some((x) => x.sessionId === id)) {
-      sessions.value = sessions.value.map((x) => (x.sessionId === id ? { ...x, title: data.title } : x))
+      sessions.value = sessions.value.map((x) =>
+        x.sessionId === id ? { ...x, title: data.title } : x
+      )
     }
   }
 
   return pending
 }
 
-// 一直发到任务做完为止。startAuto=true 表示第一发就是续跑（确认后接着做时用）�?async function runChat(firstMessage, startAuto = false) {
+/** 一直发到任务做完为止。startAuto=true 表示第一发就是续跑（确认后接着做时用）。 */
+async function runChat(firstMessage, startAuto = false) {
   let message = firstMessage
   let auto = startAuto
 
@@ -989,7 +1025,8 @@ async function send() {
 
     const pending = applyChatResult(data)
 
-    // 有卡片要停下等用户点确认；没�?hasMore 说明任务真的做完�?    if (pending || !data.hasMore) return
+    // 有卡片要停下等用户点确认；没有 hasMore 说明任务真的做完了
+    if (pending || !data.hasMore) return
 
     if (round + 1 >= MAX_AUTO_ROUNDS) {
       pushAi(`（已连续自动执行 ${MAX_AUTO_ROUNDS} 轮，先停在这里。还要继续就跟我说一声。）`)
@@ -1021,14 +1058,16 @@ async function confirm(message) {
     if (res.ok) clearPending(message)
     pushAi((res.ok && data.reply) || data.message || `已确认（HTTP ${res.status}）`)
 
-    // 后端会自动让模型接着做下一步，这里把后续回复和新的确认卡片一起显示出�?    if (res.ok && data.continuation) {
+    // 后端会自动让模型接着做下一步，这里把后续回复和新的确认卡片一起显示出来
+    if (res.ok && data.continuation) {
       const pending = data.pendingActions?.length ? data.pendingActions : null
       pushAi(data.continuation, pending)
 
-      // 确认这一波之后模型还没做完（比如还有下一批要接着跑）�?继续自动驱动，别让用户再打「继续�?      if (!pending && data.hasMore) await runChat('', true)
+      // 确认这一波之后模型还没做完（比如还有下一批要接着跑），继续自动驱动，别让用户再打「继续」
+      if (!pending && data.hasMore) await runChat('', true)
     }
   } catch (e) {
-    if (e.message !== 'UNAUTHORIZED') pushAi('确认失败： + e.message)
+    if (e.message !== 'UNAUTHORIZED') pushAi('确认失败：' + e.message)
   } finally {
     loading.value = false
     autoRound.value = 0
@@ -1106,13 +1145,7 @@ onMounted(async () => {
           @keydown.enter="doLogin"
         />
 
-        <el-alert
-          v-if="loginError"
-          :title="loginError"
-          type="error"
-          :closable="false"
-          show-icon
-        />
+        <el-alert v-if="loginError" :title="loginError" type="error" :closable="false" show-icon />
 
         <el-button
           type="primary"
@@ -1129,7 +1162,8 @@ onMounted(async () => {
 
     <template v-else>
       <div class="app-body">
-        <!-- 整体左右分栏：左边一列管「有哪些会话」，右边一列管「当前这个会话�?             品牌名也从顶部横栏挪进来�?—�?顶部横栏撤掉之后，右侧的内容整体上移�?-->
+        <!-- 整体左右分栏：左边一列管「有哪些会话」，右边一列管「当前这个会话」。
+             品牌名从顶部横栏挪进来了，顶部横栏撤掉之后右侧的内容整体上移。 -->
         <aside class="sidebar">
           <div class="sidebar-brand">商户 AI 助手</div>
 
@@ -1173,7 +1207,13 @@ onMounted(async () => {
             <!-- 置顶区：置顶的会话从各自分组里拎出来单独排在最上面 -->
             <SessionSection
               v-if="pinnedSessions.length"
-              :section="{ id: '__pinned__', name: '置顶', pinned: true, isGroup: false, items: pinnedSessions }"
+              :section="{
+                id: '__pinned__',
+                name: '置顶',
+                pinned: true,
+                isGroup: false,
+                items: pinnedSessions
+              }"
               :collapsed="isCollapsed('__pinned__')"
               :active-id="sessionId"
               :running-id="loading ? sessionId : ''"
@@ -1191,7 +1231,7 @@ onMounted(async () => {
               @drop-section="onDropSection"
             />
 
-            <!-- 分组 + 未分组，每个都能像目录一样折�?-->
+            <!-- 分组 + 未分组，每个都能像目录一样折叠 -->
             <SessionSection
               v-for="sec in groupedSections"
               :key="sec.id"
@@ -1216,7 +1256,7 @@ onMounted(async () => {
             />
           </el-scrollbar>
 
-          <!-- 用户信息沉到侧栏底部，像 DSH 那样。顶部横栏已经撤掉，这里也得有个身份提示�?-->
+          <!-- 用户信息沉到侧栏底部。顶部横栏已经撤掉，这里也得有个身份提示。 -->
           <div class="sidebar-foot">
             <el-tag type="info" effect="plain" round size="small">
               {{ currentUser.userName }}
@@ -1230,10 +1270,10 @@ onMounted(async () => {
 
         <!-- 右侧主区 -->
         <main class="main-pane">
-          <!-- 顶部一行显示当前会话名（参�?DSH 顶部那行标题�?-->
+          <!-- 顶部一行显示当前会话名 -->
           <div class="pane-title" :title="sessionTitle">{{ sessionTitle }}</div>
 
-          <!-- 下划线式页签，左对齐贴在内容区顶�?-->
+          <!-- 下划线式页签，左对齐贴在内容区顶部 -->
           <div class="pane-tabs">
             <button
               v-for="tab in viewOptions"
@@ -1258,45 +1298,51 @@ onMounted(async () => {
           <template v-if="view === 'chat'">
             <div class="chat-scroll">
               <div class="chat-list" ref="listEl" @scroll="onListScroll">
-              <el-empty
-                v-if="messages.length === 0"
-                description="试试问我：「有哪些商品？」「最近的订单情况怎么样？」「本店经营数据如何？」"
-              >
-                <template #description>
-                  <div class="empty-title">你好，我是商户AI 助手</div>
-                  <div class="empty-tips">
-                    试试问我：「有哪些商品？」「最近的订单情况怎么样？」「本店经营数据如何？」                  </div>
-                </template>
-              </el-empty>
-
-              <div v-for="(m, i) in messages" :key="i" class="row" :class="m.role">
-                <div v-if="m.role === 'ai' && m.html" class="bubble md" v-html="m.html"></div>
-                <div v-else-if="m.role === 'user'" class="bubble">{{ m.text }}</div>
-
-                <div v-if="m.pending && m.pending.length" class="pending-card">
-                  <div class="pending-body">
-                    <div class="pending-title">
-                      待确认操作<template v-if="m.pending.length > 1">（{{ m.pending.length }} 项）</template>
+                <el-empty
+                  v-if="messages.length === 0"
+                  description="试试问我：「有哪些商品？」「最近的订单情况怎么样？」「本店经营数据如何？」"
+                >
+                  <template #description>
+                    <div class="empty-title">你好，我是商户 AI 助手</div>
+                    <div class="empty-tips">
+                      试试问我：「有哪些商品？」「最近的订单情况怎么样？」「本店经营数据如何？」
                     </div>
-                    <div v-for="p in m.pending" :key="p.actionId" class="pending-desc">{{ p.summary }}</div>
+                  </template>
+                </el-empty>
+
+                <div v-for="(m, i) in messages" :key="i" class="row" :class="m.role">
+                  <div v-if="m.role === 'ai' && m.html" class="bubble md" v-html="m.html"></div>
+                  <div v-else-if="m.role === 'user'" class="bubble">{{ m.text }}</div>
+
+                  <div v-if="m.pending && m.pending.length" class="pending-card">
+                    <div class="pending-body">
+                      <div class="pending-title">
+                        待确认操作
+                        <template v-if="m.pending.length > 1">（{{ m.pending.length }} 项）</template>
+                      </div>
+                      <div v-for="p in m.pending" :key="p.actionId" class="pending-desc">
+                        {{ p.summary }}
+                      </div>
+                    </div>
+                    <div class="pending-actions">
+                      <el-button type="primary" :loading="loading" @click="confirm(m)">
+                        确认执行并继续
+                      </el-button>
+                      <el-button :disabled="loading" @click="cancel(m)">取消</el-button>
+                    </div>
                   </div>
-                  <div class="pending-actions">
-                    <el-button type="primary" :loading="loading" @click="confirm(m)">
-                      确认执行并继续                    </el-button>
-                    <el-button :disabled="loading" @click="cancel(m)">取消</el-button>
+                </div>
+
+                <div v-if="loading" class="row ai">
+                  <div class="typing-wrap">
+                    <div class="bubble typing"><span></span><span></span><span></span></div>
+                    <div v-if="autoRound" class="auto-round">自动继续 · 第 {{ autoRound }} 轮</div>
                   </div>
                 </div>
               </div>
 
-              <div v-if="loading" class="row ai">
-                <div class="typing-wrap">
-                  <div class="bubble typing"><span></span><span></span><span></span></div>
-                  <div v-if="autoRound" class="auto-round">自动继续 · �?{{ autoRound }} </div>
-                </div>
-              </div>
-              </div>
-
-              <!-- 右侧消息刻度条：**只给我发的那几条**打点，它在滚动条左边�?                   会话一长就靠它定位，比拖滚动条精准�?-->
+              <!-- 右侧消息刻度条：只给我发的那几条打点，它在滚动条左边。
+                   会话一长就靠它定位，比拖滚动条精准。 -->
               <div v-if="userTicks.length > 1" class="minimap">
                 <span
                   v-for="(t, k) in userTicks"
@@ -1331,9 +1377,14 @@ onMounted(async () => {
                   popper-class="mode-dropdown"
                   @change="changeMode"
                 >
-                  <!-- 一个小圆点跟着权限级别变色，比纯文字更容易一眼认出当前档�?-->
+                  <!-- 一个小圆点跟着权限级别变色，比纯文字更容易一眼认出当前档位 -->
                   <template #prefix><span class="mode-dot"></span></template>
-                  <el-option v-for="opt in modeOptions" :key="opt.value" :label="opt.label" :value="opt.value">
+                  <el-option
+                    v-for="opt in modeOptions"
+                    :key="opt.value"
+                    :label="opt.label"
+                    :value="opt.value"
+                  >
                     <span class="mode-opt">
                       <span class="mode-opt-label">
                         {{ opt.label }}
@@ -1344,15 +1395,21 @@ onMounted(async () => {
                   </el-option>
                 </el-select>
 
-                <span class="composer-hint">Enter 发送· Shift+Enter 换行</span>
+                <span class="composer-hint">Enter 发送 · Shift+Enter 换行</span>
 
-                <el-button type="primary" :loading="loading" :disabled="!input.trim()" @click="send">
-                  发送                </el-button>
+                <el-button
+                  type="primary"
+                  :loading="loading"
+                  :disabled="!input.trim()"
+                  @click="send"
+                >
+                  发送
+                </el-button>
               </div>
             </footer>
           </template>
 
-          <!-- ===== 轨迹：当前会话的时间线（从早到晚�?===== -->
+          <!-- ===== 轨迹：当前会话的时间线（从早到晚） ===== -->
           <template v-else>
             <div class="trace-head">
               <div>
@@ -1362,7 +1419,12 @@ onMounted(async () => {
                   <template v-else>先在左侧选一个会话</template>
                 </div>
               </div>
-              <el-button :icon="Refresh" :loading="traceLoading" :disabled="!sessionId" @click="loadTrace">
+              <el-button
+                :icon="Refresh"
+                :loading="traceLoading"
+                :disabled="!sessionId"
+                @click="loadTrace"
+              >
                 刷新
               </el-button>
             </div>
@@ -1372,10 +1434,13 @@ onMounted(async () => {
                 v-if="!sessionId"
                 description="左侧点任意一个会话，这里会列出它完整的轨迹：什么时候调用了哪个工具、参数是什么、返回了什么、有没有被护栏拦下"
               />
-              <el-empty v-else-if="!traceLoading && traceEntries.length === 0" description="这个会话还没有轨迹" />
+              <el-empty
+                v-else-if="!traceLoading && traceEntries.length === 0"
+                description="这个会话还没有轨迹"
+              />
 
               <template v-else>
-                <!-- 体检条：这个会话花了多久、调了多少次工具、烧了多�?token、有没有被拦�?-->
+                <!-- 体检条：这个会话花了多久、调了多少次工具、烧了多少 token、有没有被拦过 -->
                 <div class="trace-stats">
                   <div class="stat">
                     <span class="stat-value">{{ traceStats.turns }}</span>

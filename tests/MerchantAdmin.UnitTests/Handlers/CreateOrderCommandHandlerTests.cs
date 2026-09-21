@@ -5,6 +5,7 @@ using MerchantAdmin.API.Infrastructure.Caching;
 using MerchantAdmin.Domain.Entities.AggregatesModel;
 using MerchantAdmin.Domain.Exceptions;
 using MerchantAdmin.Infrastructure;
+using MerchantAdmin.Infrastructure.Services;
 using Microsoft.EntityFrameworkCore;
 
 namespace MerchantAdmin.UnitTests.Handlers;
@@ -30,8 +31,9 @@ public class CreateOrderCommandHandlerTests : IDisposable
         _db = new AppDbContext(options, mediatorMock.Object);
         _delayJobMock = new Mock<IDelayJobService>();
 
-        var cacheMock = new Mock<ICacheService>();
-        _handler = new CreateOrderCommandHandler(_db, _delayJobMock.Object, cacheMock.Object);
+        var cacheInvalidator = new Mock<IProductListCacheInvalidator>();
+        var stock = new ProductStockService(_db); // 真实扣减，in-memory 会更新追踪实体
+        _handler = new CreateOrderCommandHandler(_db, _delayJobMock.Object, stock, cacheInvalidator.Object);
     }
 
     [Fact]

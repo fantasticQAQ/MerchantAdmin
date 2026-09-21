@@ -1,10 +1,12 @@
 using MediatR;
 using MerchantAdmin.API.Application.DomainEventHandlers;
+using MerchantAdmin.API.Application.Services;
 using MerchantAdmin.API.Infrastructure.Caching;
 using MerchantAdmin.Domain.Entities.AggregatesModel;
 using MerchantAdmin.Domain.Entities.AggregatesModel.OrderAggregate;
 using MerchantAdmin.Domain.Events;
 using MerchantAdmin.Infrastructure;
+using MerchantAdmin.Infrastructure.Services;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 
@@ -22,10 +24,12 @@ public class OrderCancelledDomainEventHandlerTests : IDisposable
             .Options;
 
         _db = new AppDbContext(options, new Mock<IMediator>().Object);
-        _handler = new OrderCancelledDomainEventHandler(
+        var inventoryReturn = new OrderInventoryReturnService(
             _db,
-            new Mock<ICacheService>().Object,
-            new Mock<ILogger<OrderCancelledDomainEventHandler>>().Object);
+            new ProductStockService(_db),
+            new Mock<IProductListCacheInvalidator>().Object,
+            new Mock<ILogger<OrderInventoryReturnService>>().Object);
+        _handler = new OrderCancelledDomainEventHandler(inventoryReturn);
     }
 
     [Fact]
@@ -41,7 +45,7 @@ public class OrderCancelledDomainEventHandlerTests : IDisposable
         _db.Orders.Add(order);
         await _db.SaveChangesAsync();
 
-        await _handler.Handle(new OrderCancelledDomainEvent(order), CancellationToken.None);
+        await _handler.Handle(new OrderCancelledDomainEvent(order, true), CancellationToken.None);
 
         (await _db.Products.FindAsync(product.Id))!.Stock.Should().Be(10m);
     }
@@ -61,7 +65,7 @@ public class OrderCancelledDomainEventHandlerTests : IDisposable
         _db.Products.Remove(product);
         await _db.SaveChangesAsync();
 
-        var act = async () => await _handler.Handle(new OrderCancelledDomainEvent(order), CancellationToken.None);
+        var act = async () => await _handler.Handle(new OrderCancelledDomainEvent(order, true), CancellationToken.None);
 
         // 不抛异常，回补跳过（Error 日志供对账）
         await act.Should().NotThrowAsync();
@@ -80,7 +84,7 @@ public class OrderCancelledDomainEventHandlerTests : IDisposable
         _db.Orders.Add(order);
         await _db.SaveChangesAsync();
 
-        await _handler.Handle(new OrderTimedOutDomainEvent(order), CancellationToken.None);
+        await _handler.Handle(new OrderTimedOutDomainEvent(order, true), CancellationToken.None);
 
         (await _db.Products.FindAsync(product.Id))!.Stock.Should().Be(10m);
     }

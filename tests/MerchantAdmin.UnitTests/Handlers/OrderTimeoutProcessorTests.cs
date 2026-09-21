@@ -1,12 +1,14 @@
 using MediatR;
 using MerchantAdmin.API.Application.DomainEventHandlers;
 using MerchantAdmin.API.Application.IntegrationEvents;
-using MerchantAdmin.API.Infrastructure.Caching;
 using MerchantAdmin.Application.Services;
+using MerchantAdmin.API.Application.Services;
+using MerchantAdmin.API.Infrastructure.Caching;
 using MerchantAdmin.Domain.Entities.AggregatesModel;
 using MerchantAdmin.Domain.Entities.AggregatesModel.OrderAggregate;
 using MerchantAdmin.Domain.Events;
 using MerchantAdmin.Infrastructure;
+using MerchantAdmin.Infrastructure.Services;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 
@@ -27,7 +29,6 @@ public class OrderTimeoutProcessorTests : IDisposable
         _db = new AppDbContext(options, new Mock<IMediator>().Object);
 
         // 模拟 MediatR 领域事件分发：超时关闭事件 → 执行真实回补 handler（与生产行为一致）
-        var cacheMock = new Mock<ICacheService>();
         var handlerLogger = new Mock<ILogger<OrderCancelledDomainEventHandler>>();
         var mediatorMock = new Mock<IMediator>();
         mediatorMock
@@ -36,7 +37,12 @@ public class OrderTimeoutProcessorTests : IDisposable
             {
                 if (notification is OrderTimedOutDomainEvent evt)
                 {
-                    var handler = new OrderCancelledDomainEventHandler(_db, cacheMock.Object, handlerLogger.Object);
+                    var inventoryReturn = new OrderInventoryReturnService(
+                        _db,
+                        new ProductStockService(_db),
+                        new Mock<IProductListCacheInvalidator>().Object,
+                        new Mock<ILogger<OrderInventoryReturnService>>().Object);
+                    var handler = new OrderCancelledDomainEventHandler(inventoryReturn);
                     handler.Handle(evt, ct).GetAwaiter().GetResult();
                 }
             })

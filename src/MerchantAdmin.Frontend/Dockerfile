@@ -11,8 +11,10 @@ RUN npm ci --registry=https://registry.npmmirror.com
 # 复制前端目录的所有源码
 COPY src/MerchantAdmin.Frontend/ .
 
-# 构建（只跑 vite build，跳过 type-check）
-RUN npm run build-only
+# 构建：npm run build = type-check + vite build（run-p 并行）。
+# 必须带上 type-check：以前只跑 build-only，类型错误会一路进镜像——
+# 曾因此把「组件里用了没 import 的 watch」这种运行时报错发布上线（页面白屏）。
+RUN npm run build
 
 # ========== 第二阶段：运行 ==========
 FROM nginx:alpine

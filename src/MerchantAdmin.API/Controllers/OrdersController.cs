@@ -19,38 +19,74 @@ namespace MerchantAdmin.API.Controllers
             _db = db;
         }
 
+        /// <summary>
+        /// 创建订单。请求头 <c>x-requestid</c> 必填：客户端为每次下单生成一个 GUID，
+        /// 超时重发时带同一个 GUID，服务端只下一次单（不会重复扣库存）。
+        /// </summary>
         [HttpPost("create")]
         [Authorize(Roles = "Admin,Operator,SuperAdmin")]
-        public async Task<ActionResult<ApiResponse<int>>> Create(CreateOrderCommand cmd)
+        public async Task<ActionResult<ApiResponse<int>>> Create(
+            CreateOrderCommand cmd,
+            [FromHeader(Name = "x-requestid")] Guid requestId)
         {
-            var orderId = await _mediator.Send(cmd);
+            if (requestId == Guid.Empty)
+            {
+                return BadRequest(ApiResponse<int>.Fail(400, "请求头 x-requestid 不能为空 GUID"));
+            }
+
+            var orderId = await _mediator.Send(new IdentifiedCommand<CreateOrderCommand, int>(cmd, requestId));
             return Ok(ApiResponse<int>.Ok(orderId));
         }
 
         [HttpPost("{orderId}/cancel")]
         [Authorize(Roles = "Admin,Operator,SuperAdmin")]
-        public async Task<ActionResult<ApiResponse<bool>>> Cancel(int orderId)
+        public async Task<ActionResult<ApiResponse<bool>>> Cancel(
+            int orderId,
+            [FromHeader(Name = "x-requestid")] Guid requestId)
         {
-            var result = await _mediator.Send(new CancelOrderCommand(orderId));
+            if (requestId == Guid.Empty)
+            {
+                return BadRequest(ApiResponse<bool>.Fail(400, "请求头 x-requestid 不能为空 GUID"));
+            }
+
+            var result = await _mediator.Send(
+                new IdentifiedCommand<CancelOrderCommand, bool>(new CancelOrderCommand(orderId), requestId));
             return Ok(ApiResponse<bool>.Ok(result));
         }
 
         [HttpPost("{orderId}/pay")]
         [Authorize(Roles = "Admin,Operator,SuperAdmin")]
-        public async Task<ActionResult<ApiResponse<int>>> Pay(int orderId)
+        public async Task<ActionResult<ApiResponse<int>>> Pay(
+            int orderId,
+            [FromHeader(Name = "x-requestid")] Guid requestId)
         {
-            var result = await _mediator.Send(new PayOrderCommand(orderId));
+            if (requestId == Guid.Empty)
+            {
+                return BadRequest(ApiResponse<int>.Fail(400, "请求头 x-requestid 不能为空 GUID"));
+            }
+
+            var result = await _mediator.Send(
+                new IdentifiedCommand<PayOrderCommand, int>(new PayOrderCommand(orderId), requestId));
             return Ok(ApiResponse<int>.Ok(result));
         }
 
         [HttpPost("{orderId}/refund")]
         [Authorize(Roles = "Admin,Operator,SuperAdmin")]
-        public async Task<ActionResult<ApiResponse<bool>>> Refund(int orderId)
+        public async Task<ActionResult<ApiResponse<bool>>> Refund(
+            int orderId,
+            [FromHeader(Name = "x-requestid")] Guid requestId)
         {
-            var result = await _mediator.Send(new RefundOrderCommand(orderId));
+            if (requestId == Guid.Empty)
+            {
+                return BadRequest(ApiResponse<bool>.Fail(400, "请求头 x-requestid 不能为空 GUID"));
+            }
+
+            var result = await _mediator.Send(
+                new IdentifiedCommand<RefundOrderCommand, bool>(new RefundOrderCommand(orderId), requestId));
             return Ok(ApiResponse<bool>.Ok(result));
         }
 
+        /// <summary>删除订单。软删 + IsDeleted 判断，重复调用天然无副作用，故不加幂等键。</summary>
         [HttpDelete("{orderId}")]
         [Authorize(Roles = "Admin,SuperAdmin")]
         public async Task<ActionResult<ApiResponse<bool>>> Delete(int orderId)

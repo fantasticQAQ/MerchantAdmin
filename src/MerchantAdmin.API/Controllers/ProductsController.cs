@@ -36,11 +36,26 @@ namespace MerchantAdmin.API.Controllers
             return Ok(ApiResponse<int>.Ok(productId));
         }
 
+        /// <summary>
+        /// 更新商品（含库存扣减）。请求头 <c>x-requestid</c> 必填，作为幂等键：
+        /// 客户端为每次操作生成一个 GUID，超时重发时带同一个 GUID，服务端只执行一次。
+        /// </summary>
         [HttpPut("{productId}")]
         [Authorize(Roles = "Admin,Operator,SuperAdmin")]
-        public async Task<ActionResult<ApiResponse<bool>>> Update(int productId, UpdateProductCommand cmd)
+        public async Task<ActionResult<ApiResponse<bool>>> Update(
+            int productId,
+            UpdateProductCommand cmd,
+            [FromHeader(Name = "x-requestid")] Guid requestId)
         {
-            var result = await _mediator.Send(cmd with { ProductId = productId });
+            if (requestId == Guid.Empty)
+            {
+                return BadRequest(ApiResponse<bool>.Fail(400, "请求头 x-requestid 不能为空 GUID"));
+            }
+
+            var identified = new IdentifiedCommand<UpdateProductCommand, bool>(
+                cmd with { ProductId = productId }, requestId);
+
+            var result = await _mediator.Send(identified);
             await InvalidateProductListCacheAsync();
             return Ok(ApiResponse<bool>.Ok(result));
         }

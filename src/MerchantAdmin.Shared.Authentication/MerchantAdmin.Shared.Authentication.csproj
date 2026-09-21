@@ -12,6 +12,9 @@
 
   <ItemGroup>
     <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="8.0.27" />
+    <!-- 凭证版本号存在 Redis 里，读写两端（身份服务 / 资源服务）共用这里的实现。
+         版本与 MerchantAdmin.API 的 Microsoft.Extensions.Caching.StackExchangeRedis 8.0.27 传递来的版本保持一致。 -->
+    <PackageReference Include="StackExchange.Redis" Version="2.7.27" />
   </ItemGroup>
 
 </Project>

@@ -127,10 +127,21 @@ npm run dev                               # http://localhost:5173
 
 ## 认证与授权
 
-基于 **ASP.NET Core Identity + JWT** 的 RBAC 权限体系（角色：SuperAdmin / Admin / Operator + 自定义角色），JWT 携带角色与 SecurityStamp（改密码后旧 token 立即失效）。接口通过 `[Authorize(Roles="...")]` 声明式鉴权。
+基于 **ASP.NET Core Identity + JWT** 的 RBAC 权限体系（角色：SuperAdmin / Admin / Operator + 自定义角色）。接口通过 `[Authorize(Roles="...")]` 声明式鉴权。
 
-1. 调用 `POST /api/Auth/login`（或 `register`）获取 `token`；
-2. 请求业务接口时携带 `Authorization: Bearer {token}` 头。
+采用 **短 access token + refresh token**：
+
+1. 调用 `POST /api/identity/auth/login` 获取 `token`（access token，默认 15 分钟）与 `refreshToken`（默认 7 天）；
+2. 请求业务接口时携带 `Authorization: Bearer {token}` 头；
+3. access token 过期后，用 `POST /api/identity/auth/refresh` 换一对新的 token（前端 `utils/request` 已做 401 自动续期，业务代码无感）。
+
+设计要点：
+
+- **撤销靠 Redis 里的凭证版本号，窗口≈0**。用户表有 `TokenVersion`，改密码 / 重置密码 / 改角色 / 删账号时 +1 并写入 Redis（`auth:ver:{userId}`）；token 里带 `ver`，各服务校验时与 Redis 中的当前值比对，不一致即 401。读的是一次内存级键值（约 0.1ms），所以不需要本地缓存，也就不存在"缓存 TTL 就是撤销窗口"的问题。Redis 不可用时放行（fail-open）——失败方向是"撤销暂时失效"，而不是"Redis 一抖全站被锁在门外"。
+- **改密码与改角色的结局不同，而且都是对的**。客户端收到 401 会自动续期：改密码时续期被拒（`SecurityStamp` 已变）→ 被踢下线需重新登录；改角色时续期成功（角色重新读库）→ 无感换权，不会被踢。
+- **资源服务不查库、不调用身份服务**，撤销的判断只在签发方（Identity）产生，资源服务只做一次版本比对。
+- **refresh token 每次轮换**，库里只存 SHA-256 哈希；已作废的 token 被重复使用超过 30 秒宽限期时，判定为泄露并作废该用户全部 refresh token。access token 过期后由前端 `utils/request` 静默续期，并区分"真失效"（登出）与"网络/5xx 临时故障"（保留登录态重试）。
+- 相关配置：`Jwt:AccessTokenMinutes` / `Jwt:RefreshTokenDays`（见 `Identity.API/appsettings.json`）、`Redis:ConnectionString`。
 
 默认超管账号 `admin / 123456`（不可修改角色、不可删除、不可重置密码，仅一台）。
 

@@ -9,15 +9,21 @@ namespace Identity.API.Controllers
         private readonly UserManager<ApplicationUser> _userManager;
         private readonly SignInManager<ApplicationUser> _signInManager;
         private readonly ITokenService _tokenService;
+        private readonly IRefreshTokenService _refreshTokens;
+        private readonly ICredentialRevoker _revoker;
 
         public AuthController(
             UserManager<ApplicationUser> userManager,
             SignInManager<ApplicationUser> signInManager,
-            ITokenService tokenService)
+            ITokenService tokenService,
+            IRefreshTokenService refreshTokens,
+            ICredentialRevoker revoker)
         {
             _userManager = userManager;
             _signInManager = signInManager;
             _tokenService = tokenService;
+            _refreshTokens = refreshTokens;
+            _revoker = revoker;
         }
 
         [HttpPost("register")]
@@ -49,10 +55,33 @@ namespace Identity.API.Controllers
             if (!ok)
                 return Unauthorized(new { message = "用户名或密码错误" });
 
-            var token = await _tokenService.CreateToken(user);
+            return Ok(await IssueTokenPairAsync(user));
+        }
+
+        /// <summary>
+        /// 用 refresh token 换一对新的 token。
+        /// 这是整条链路里唯一会重新读库的地方：用户是否还在、SecurityStamp 是否变过、当前角色是什么，
+        /// 全部在此刻重新计算——原先分散在每个请求上的校验，现在集中到了这里。
+        /// </summary>
+        [HttpPost("refresh")]
+        public async Task<IActionResult> Refresh(RefreshTokenRequest req)
+        {
+            var user = await _refreshTokens.ConsumeAsync(req.RefreshToken);
+            if (user is null)
+            {
+                return Unauthorized(new { message = "登录状态已失效，请重新登录" });
+            }
+
+            return Ok(await IssueTokenPairAsync(user));
+        }
+
+        private async Task<TokenPairResponse> IssueTokenPairAsync(ApplicationUser user)
+        {
+            var token = await _tokenService.CreateAccessTokenAsync(user);
+            var refreshToken = await _refreshTokens.IssueAsync(user);
             var roles = await _userManager.GetRolesAsync(user);
 
-            return Ok(new { token, userName = user.UserName, roles });
+            return new TokenPairResponse(token, refreshToken, user.UserName!, roles.ToList());
         }
 
         // 个人中心：修改自己的密码
@@ -78,6 +107,10 @@ namespace Identity.API.Controllers
                 return BadRequest(new { message });
             }
 
+            // 撤销该用户所有已签发的 token：其他设备下一次请求就会被拒，续期也会失败（SecurityStamp 已变）。
+            // 当前设备手上的 access token 会在续期失败后被踢出。
+            await _revoker.RevokeAsync(user);
+
             return Ok("密码修改成功");
         }
 
@@ -99,4 +132,9 @@ namespace Identity.API.Controllers
     }
 
     public record ChangePasswordRequest(string OldPassword, string NewPassword);
+
+    public record RefreshTokenRequest(string RefreshToken);
+
+    /// <summary>登录 / 刷新成功时返回的一对 token。</summary>
+    public record TokenPairResponse(string Token, string RefreshToken, string UserName, List<string> Roles);
 }

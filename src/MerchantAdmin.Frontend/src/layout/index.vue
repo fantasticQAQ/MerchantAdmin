@@ -77,13 +77,14 @@
   </div>
 </template>
 
-<script setup>
-import { computed, reactive, ref } from 'vue'
+<script setup lang="ts">
+import { computed, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { DataAnalysis, Goods, Tickets, User, ArrowDown, Setting, Lock } from '@element-plus/icons-vue'
 import { useUserStore } from '@/store/user'
 import { changePassword } from '@/api/auth'
+import { canAccess } from '@/utils/routeAccess'
 
 const route = useRoute()
 const router = useRouter()
@@ -106,6 +107,18 @@ const menuItems = computed(() => {
   return items
 })
 
+// 停在管理员页面时被降级：静默续期会把新角色同步进 store，这里跟着把已经没权限的页面
+// 换成仪表盘——否则菜单项消失了，人却还留在页面上，接下来每个请求都拿 403。
+// （导航时的拦截由 router.beforeEach 负责，这里补的是"不跳转就一直停着"的情况。）
+watch(
+  () => userStore.roles,
+  roles => {
+    if (!canAccess(route.meta, roles)) {
+      router.replace('/dashboard')
+    }
+  }
+)
+
 const handleLogout = () => {
   userStore.logout()
   router.push('/login')
@@ -117,7 +130,7 @@ const pwdSubmitting = ref(false)
 const pwdFormRef = ref()
 const pwdForm = reactive({ oldPassword: '', newPassword: '', confirmPassword: '' })
 
-const validateConfirm = (_rule, value, callback) => {
+const validateConfirm = (_rule: unknown, value: string, callback: (error?: Error) => void) => {
   if (value !== pwdForm.newPassword) {
     callback(new Error('两次输入的密码不一致'))
   } else {
@@ -148,7 +161,7 @@ const handleChangePassword = async () => {
     ElMessage.success('密码修改成功，请重新登录')
     pwdDialogVisible.value = false
     handleLogout()
-  } catch (e) {
+  } catch (e: any) {
     ElMessage.error(e.message || '修改失败')
     console.error(e)
   } finally {

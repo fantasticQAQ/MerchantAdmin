@@ -1,4 +1,4 @@
-﻿namespace Identity.API.Controllers;
+namespace Identity.API.Controllers;
 
 /// <summary>
 /// 微信小程序认证
@@ -10,17 +10,20 @@ public class WxAuthController : ControllerBase
     private readonly WxAuthService _wxAuth;
     private readonly UserManager<ApplicationUser> _userManager;
     private readonly ITokenService _tokenService;
+    private readonly IRefreshTokenService _refreshTokens;
     private readonly ILogger<WxAuthController> _logger;
 
     public WxAuthController(
         WxAuthService wxAuth,
         UserManager<ApplicationUser> userManager,
         ITokenService tokenService,
+        IRefreshTokenService refreshTokens,
         ILogger<WxAuthController> logger)
     {
         _wxAuth = wxAuth;
         _userManager = userManager;
         _tokenService = tokenService;
+        _refreshTokens = refreshTokens;
         _logger = logger;
     }
 
@@ -69,10 +72,11 @@ public class WxAuthController : ControllerBase
             }
         }
 
-        // 4. 生成 JWT
-        var token = await _tokenService.CreateToken(user);
+        // 4. 生成 JWT + refresh token
+        var token = await _tokenService.CreateAccessTokenAsync(user);
+        var refreshToken = await _refreshTokens.IssueAsync(user);
         var roles = await _userManager.GetRolesAsync(user);
 
-        return Ok(new { token, userName = user.UserName, roles });
+        return Ok(new { token, refreshToken, userName = user.UserName, roles });
     }
 }

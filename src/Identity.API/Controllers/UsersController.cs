@@ -1,4 +1,4 @@
-﻿namespace Identity.API.Controllers
+namespace Identity.API.Controllers
 {
     [ApiController]
     [Route("api/[controller]")]
@@ -6,10 +6,12 @@
     public class UsersController : ControllerBase
     {
         private readonly UserManager<ApplicationUser> _userManager;
+        private readonly ICredentialRevoker _revoker;
 
-        public UsersController(UserManager<ApplicationUser> userManager)
+        public UsersController(UserManager<ApplicationUser> userManager, ICredentialRevoker revoker)
         {
             _userManager = userManager;
+            _revoker = revoker;
         }
 
         // 用户列表（含角色）
@@ -85,6 +87,7 @@
                 }
 
                 var currentRoles = await _userManager.GetRolesAsync(user);
+                var rolesChanged = !currentRoles.OrderBy(r => r).SequenceEqual(req.Roles.OrderBy(r => r));
 
                 // 超级管理员角色不可新分配给普通用户（已是超管的可保留）
                 if (req.Roles.Contains("SuperAdmin") && !currentRoles.Contains("SuperAdmin"))
@@ -112,6 +115,13 @@
 
                 await _userManager.RemoveFromRolesAsync(user, currentRoles);
                 await _userManager.AddToRolesAsync(user, req.Roles);
+
+                // 角色真的变了才撤销：客户端拿到 401 后会自动续期，续期时重新读库拿到新角色，
+                // 表现为"无感换权"而不是被踢下线。只是改了邮箱时不动版本号，避免无谓地把人踢一遍。
+                if (rolesChanged)
+                {
+                    await _revoker.RevokeAsync(user);
+                }
             }
 
             return Ok("更新成功");
@@ -144,11 +154,17 @@
                 }
             }
 
+            // 删完之后库里没有这一行了，无法再自增版本号，所以先记下当前值，
+            // 删除成功后按它 +1 写进 Redis，让这个账号在途的 token 立即失效。
+            var versionBeforeDelete = user.TokenVersion;
+
             var result = await _userManager.DeleteAsync(user);
             if (!result.Succeeded)
             {
                 return BadRequest(result.Errors);
             }
+
+            await _revoker.RevokeForDeletedUserAsync(id, versionBeforeDelete);
 
             return Ok("删除成功");
         }
@@ -175,6 +191,9 @@
             {
                 return BadRequest(result.Errors);
             }
+
+            // 重置密码等同于改密码：撤销该用户所有已签发的 token，让在途会话立即失效
+            await _revoker.RevokeAsync(user);
 
             return Ok("密码已重置");
         }

@@ -1,4 +1,4 @@
-
+﻿
 namespace MerchantAdmin.Domain.Entities.AggregatesModel
 {
     public class Product : Entity, IAggregateRoot
@@ -7,6 +7,11 @@ namespace MerchantAdmin.Domain.Entities.AggregatesModel
         public decimal Price { get; private set; }
         public decimal Stock { get; private set; }
         public bool IsActive { get; private set; }
+
+        /// <summary>
+        /// 并发令牌列，EF Core 会在更新时检查 RowVersion 是否已变化，若已变化则抛出 DbUpdateConcurrencyException，
+        /// </summary>
+        public byte[] RowVersion { get; private set; } = Array.Empty<byte>();
 
         protected Product() { }
 
@@ -29,15 +34,6 @@ namespace MerchantAdmin.Domain.Entities.AggregatesModel
 
             Name = name;
             Price = price;
-        }
-
-        /// <summary>手动调整库存（正数补货，负数扣减），结果不能为负。</summary>
-        public void AdjustStock(decimal delta)
-        {
-            var newStock = Stock + delta;
-            if (newStock < 0) throw new DomainException("库存不能为负数");
-
-            Stock = newStock;
         }
 
         /// <summary>上架 / 下架。</summary>

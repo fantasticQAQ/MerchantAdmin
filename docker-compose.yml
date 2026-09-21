@@ -78,12 +78,11 @@ services:
       context: .                  # 配合 --project-directory <repo-root>，永远相对于仓库根
       dockerfile: src/Identity.API/Dockerfile
     environment:
-      - ConnectionStrings__Default=Server=sqlserver,1433;Database=MerchantAdmin.Identity;User Id=sa;Password=${SQLSERVER_SA_PASSWORD};TrustServerCertificate=True;
+      - ConnectionStrings__Default=Server=sqlserver,1433;Database=MerchantAdmin.Identity;User Id=sa;Password=${SQLSERVER_SA_PASSWORD};TrustServerCertificate=True;Max Pool Size=200;
       - Jwt__Issuer=${JWT_ISSUER}
       - Jwt__Key=${JWT_KEY}
       - WeChat__AppId=${WECHAT_APPID}
       - WeChat__AppSecret=${WECHAT_APPSECRET}
-      - InternalApi__Key=${INTERNAL_API_KEY}
     image: identity-api:latest    # 建议加 tag 避免混淆
     container_name: identity-api
     # 不暴露宿主端口：仅由统一入口 nginx（8081）通过内部网络访问
@@ -111,11 +110,9 @@ services:
       context: .                  # 配合 --project-directory <repo-root>，永远相对于仓库根
       dockerfile: src/MerchantAdmin.API/Dockerfile
     environment:
-      - ConnectionStrings__Default=Server=sqlserver,1433;Database=MerchantAdmin.Merchant;User Id=sa;Password=${SQLSERVER_SA_PASSWORD};TrustServerCertificate=True;
+      - ConnectionStrings__Default=Server=sqlserver,1433;Database=MerchantAdmin.Merchant;User Id=sa;Password=${SQLSERVER_SA_PASSWORD};TrustServerCertificate=True;Max Pool Size=200;
       - Jwt__Issuer=${JWT_ISSUER}
       - Jwt__Key=${JWT_KEY}
-      - InternalApi__BaseUrl=http://identity-api:8080
-      - InternalApi__Key=${INTERNAL_API_KEY}
     image: merchant-api:latest     # 建议加 tag
     container_name: merchant-api
     # 不暴露宿主端口：仅由统一入口 nginx（8081）通过内部网络访问
@@ -145,6 +142,14 @@ services:
     image: payment-api:latest
     container_name: payment-api
     # 不暴露宿主端口：支付回调走统一入口 nginx（/api/payment/）
+    # nginx 声明了 depends_on: service_healthy，这里必须有 healthcheck，否则 compose 直接报
+    # "has no healthcheck configured" 并中断整个 up
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
     depends_on:
       rabbitmq:
         condition: service_healthy
@@ -161,9 +166,9 @@ services:
     # 纯静态容器：不对外暴露端口，仅由统一入口 nginx（8081）通过内部网络访问
     depends_on:
       merchant-api:
-        condition: service_started
+        condition: service_healthy
       identity-api:
-        condition: service_started
+        condition: service_healthy
     networks:
       - merchant-network
     restart: unless-stopped
@@ -180,11 +185,11 @@ services:
       frontend:
         condition: service_started
       merchant-api:
-        condition: service_started
+        condition: service_healthy
       identity-api:
-        condition: service_started
+        condition: service_healthy
       payment-api:
-        condition: service_started
+        condition: service_healthy
     networks:
       - merchant-network
     restart: unless-stopped
@@ -192,7 +197,7 @@ services:
   merchant-migrator:
     build:
       context: .                       # 配合 --project-directory <repo-root>，永远相对于仓库根
-      dockerfile: build/Dockerfile.migrate
+      dockerfile: Dockerfile.migrate
     image: db-migrator:latest
     container_name: merchant-migrator
     entrypoint: /opt/mssql-tools18/bin/sqlcmd
@@ -210,7 +215,7 @@ services:
   identity-migrator:
     build:
       context: .                       # 配合 --project-directory <repo-root>，永远相对于仓库根
-      dockerfile: build/Dockerfile.migrate
+      dockerfile: Dockerfile.migrate
     image: db-migrator:latest
     container_name: identity-migrator
     entrypoint: /opt/mssql-tools18/bin/sqlcmd

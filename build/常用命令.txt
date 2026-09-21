@@ -75,15 +75,15 @@ docker compose logs -f merchant-api
 kubectl scale deployment ingress-nginx-controller -n ingress-nginx --replicas=0
 
 
-# 1. 确保先生成 SQL
+# 1. 建迁移
+dotnet ef migrations add test3 --project src/MerchantAdmin.Infrastructure --startup-project src/MerchantAdmin.API --context AppDbContext --output-dir Migrations
+dotnet ef migrations add test3 --project src/Identity.API --startup-project src/Identity.API --context IdentityDbContext --output-dir Migrations
+
+# 下面两句用.\build\local-ci.ps1替代
+
+# 2. 生成 SQL
 dotnet ef migrations script --project src/MerchantAdmin.Infrastructure --startup-project src/MerchantAdmin.API --idempotent --output build/sql/MerchantAdmin.sql
 dotnet ef migrations script --project src/Identity.API --startup-project src/Identity.API --idempotent --output build/sql/Identity.sql
 
-# 2. 再构建迁移镜像（这次 COPY 时 build/sql/ 已经不空了）
-docker build -t db-migrator:latest -f build/Dockerfile.migrate .
-
-# 3. 验证：镜像里确实有脚本
-docker run --rm --entrypoint ls db-migrator:latest -la /scripts/
-
-
+# 3.构建镜像并迁移
 docker compose --project-directory . -f build/docker-compose.yml --profile migrate up --build --abort-on-container-exit merchant-migrator identity-migrator

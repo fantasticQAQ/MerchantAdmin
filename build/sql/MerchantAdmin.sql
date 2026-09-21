@@ -1,6 +1,6 @@
 ﻿-- =====================================================
 -- 自动注入：库不存在则创建 + 切换上下文
--- 生成时间：2026-09-01 21:48:35
+-- 生成时间：2026-09-20 04:15:12
 -- -----------------------------------------------------
 -- 说明：
 --  1) 先把 QUOTED_IDENTIFIER / ANSI_NULLS 等 EF Core 要求的 SET 选项打开。
@@ -136,6 +136,127 @@ IF NOT EXISTS (
 BEGIN
     INSERT INTO [__EFMigrationsHistory] ([MigrationId], [ProductVersion])
     VALUES (N'20260901121213_InitialCreate', N'8.0.27');
+END;
+GO
+
+COMMIT;
+GO
+
+BEGIN TRANSACTION;
+GO
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20260919122940_AddRowVersionToProduct'
+)
+BEGIN
+    ALTER TABLE [Products] ADD [RowVersion] rowversion NOT NULL;
+END;
+GO
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20260919122940_AddRowVersionToProduct'
+)
+BEGIN
+    INSERT INTO [__EFMigrationsHistory] ([MigrationId], [ProductVersion])
+    VALUES (N'20260919122940_AddRowVersionToProduct', N'8.0.27');
+END;
+GO
+
+COMMIT;
+GO
+
+BEGIN TRANSACTION;
+GO
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20260919145819_AddInventoryReturnedToOrder'
+)
+BEGIN
+    ALTER TABLE [Orders] ADD [InventoryReturned] bit NOT NULL DEFAULT CAST(0 AS bit);
+END;
+GO
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20260919145819_AddInventoryReturnedToOrder'
+)
+BEGIN
+    EXEC(N'ALTER TABLE [Products] ADD CONSTRAINT [CK_Products_Stock_NonNegative] CHECK ([Stock] >= 0)');
+END;
+GO
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20260919145819_AddInventoryReturnedToOrder'
+)
+BEGIN
+    INSERT INTO [__EFMigrationsHistory] ([MigrationId], [ProductVersion])
+    VALUES (N'20260919145819_AddInventoryReturnedToOrder', N'8.0.27');
+END;
+GO
+
+COMMIT;
+GO
+
+BEGIN TRANSACTION;
+GO
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20260919162316_AddClientRequestForIdempotency'
+)
+BEGIN
+    CREATE TABLE [ClientRequests] (
+        [Id] uniqueidentifier NOT NULL,
+        [Name] nvarchar(256) NOT NULL,
+        [Time] datetime2 NOT NULL,
+        CONSTRAINT [PK_ClientRequests] PRIMARY KEY ([Id])
+    );
+END;
+GO
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20260919162316_AddClientRequestForIdempotency'
+)
+BEGIN
+    INSERT INTO [__EFMigrationsHistory] ([MigrationId], [ProductVersion])
+    VALUES (N'20260919162316_AddClientRequestForIdempotency', N'8.0.27');
+END;
+GO
+
+COMMIT;
+GO
+
+BEGIN TRANSACTION;
+GO
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20260919163037_AddClientRequest'
+)
+BEGIN
+    INSERT INTO [__EFMigrationsHistory] ([MigrationId], [ProductVersion])
+    VALUES (N'20260919163037_AddClientRequest', N'8.0.27');
+END;
+GO
+
+COMMIT;
+GO
+
+BEGIN TRANSACTION;
+GO
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20260919201422_test3'
+)
+BEGIN
+    INSERT INTO [__EFMigrationsHistory] ([MigrationId], [ProductVersion])
+    VALUES (N'20260919201422_test3', N'8.0.27');
 END;
 GO
 

@@ -1,8 +1,21 @@
 ﻿$ErrorActionPreference = "Stop"
 
 # 仓库根目录（本脚本位于 build/ 下）
-$repoRoot = Split-Path $PSScriptRoot -Parent
+# 不依赖 $PSScriptRoot（在部分调用方式下可能为空），改为向上查找，直到定位到含
+# MerchantAdmin.sln 的目录，确保任何启动位置下 repoRoot 都正确。
+$here = if ($PSScriptRoot) { $PSScriptRoot } else { Split-Path -Parent $MyInvocation.MyCommand.Definition }
+$repoRoot = $here
+while ((-not (Test-Path (Join-Path $repoRoot "MerchantAdmin.sln"))) -and (Split-Path $repoRoot -Parent) -ne $repoRoot) {
+    $repoRoot = Split-Path $repoRoot -Parent
+}
+if (-not (Test-Path (Join-Path $repoRoot "MerchantAdmin.sln"))) {
+    throw "无法定位仓库根（未找到 MerchantAdmin.sln），脚本应放在仓库根下的 build/ 目录"
+}
 Set-Location $repoRoot
+# 同步 .NET 进程的当前目录。Set-Location 只改 PowerShell 的位置，
+# 而 [System.IO.File]::ReadAllText 等静态 API 用的是进程当前目录，
+# 两者不一致会导致 build\build\sql 这类路径错乱。
+[Environment]::CurrentDirectory = $repoRoot
 
 $progressFile = Join-Path $repoRoot "build\ci-progress.txt"
 $SHA = git rev-parse --short HEAD
@@ -72,7 +85,10 @@ function Ensure-InitialMigration {
     $migNames = @($listLines | ForEach-Object {
         $line = "$_"
         if ($line -match '^\s*(Build started|Build succeeded|Build failed|Done\.|To undo this action)') { return }
-        if ($line -match 'error|fatal') { return }
+        if ($line -match '\b(info|dbug|warn|fail): ' -or $line -match 'error|fatal') { return }
+        # EF 日志为多行输出，"info: ..." 行被过滤后，其续行（Executed DbCommand...）会残留，
+        # 需一并剔除，否则会被误当成迁移名计入数量。
+        if ($line -match 'Executed DbCommand') { return }
         $trimmed = $line.Trim()
         if ([string]::IsNullOrWhiteSpace($trimmed)) { return }
         $trimmed
@@ -107,6 +123,11 @@ function Add-CreateDatabasePrologue {
     )
     if ([string]::IsNullOrWhiteSpace($SqlFile))      { throw "SqlFile 不能为空" }
     if ([string]::IsNullOrWhiteSpace($DatabaseName)) { throw "DatabaseName 不能为空" }
+    # 统一转绝对路径：本函数内混用 PowerShell(Test-Path) 与 .NET(ReadAllText/WriteAllText)，
+    # 两者对"当前目录"的认定不同，必须绝对化才不会解析到 build\build\sql。
+    if (-not [System.IO.Path]::IsPathRooted($SqlFile)) {
+        $SqlFile = [System.IO.Path]::GetFullPath((Join-Path $repoRoot $SqlFile))
+    }
     if (-not (Test-Path $SqlFile)) {
         throw "SQL 文件不存在，无法注入 CREATE DATABASE：$SqlFile"
     }
@@ -222,7 +243,7 @@ Write-Host "`n[2/3] 迁移数据库（sqlcmd 执行 SQL）..." -ForegroundColor 
 # 迁移镜像每次都 --build --no-cache，避免 SQL 更新了但 COPY 还是旧的缓存
 $buildMigArgs = @(
   "compose", "--project-directory", ".",
-  "-f", "build/docker-compose.yml",
+  "-f", "docker-compose.yml",
   "--profile", "migrate",
   "build", "--no-cache", "merchant-migrator", "identity-migrator"
 )
@@ -230,7 +251,7 @@ Invoke-External -FilePath "docker" -Arguments $buildMigArgs
 
 $upMigArgs = @(
   "compose", "--project-directory", ".",
-  "-f", "build/docker-compose.yml",
+  "-f", "docker-compose.yml",
   "--profile", "migrate",
   "up", "--abort-on-container-exit", "merchant-migrator", "identity-migrator"
 )

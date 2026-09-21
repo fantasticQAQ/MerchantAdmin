@@ -1,4 +1,4 @@
-import request from '@/utils/request'
+import request, { newRequestId } from '@/utils/request'
 
 export interface ProductDto {
   productId: number
@@ -47,9 +47,15 @@ export function createProduct(data: CreateProductCommand) {
   return request.post<number>('/merchant/products', data)
 }
 
-/** 更新商品（编辑名称/价格、调整库存、上下架） */
-export function updateProduct(id: number, data: UpdateProductParams) {
-  return request.put<boolean>(`/merchant/products/${id}`, data)
+/**
+ * 更新商品（编辑名称/价格、调整库存、上下架）。
+ * 带 x-requestid 幂等键：同一 ID 的请求服务端只执行一次，避免超时重发导致重复扣减。
+ * 调用方若自己做重试，把第一次的 requestId 传进来即可复用。
+ */
+export function updateProduct(id: number, data: UpdateProductParams, requestId = newRequestId()) {
+  return request.put<boolean>(`/merchant/products/${id}`, data, {
+    headers: { 'x-requestid': requestId }
+  })
 }
 
 /** 删除商品 */

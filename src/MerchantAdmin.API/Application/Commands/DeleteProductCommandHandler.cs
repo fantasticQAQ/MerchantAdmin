@@ -2,7 +2,8 @@ using MerchantAdmin.API.Infrastructure.Caching;
 
 namespace MerchantAdmin.API.Application.Commands
 {
-    public class DeleteProductCommandHandler(AppDbContext db, ICacheService cache) : IRequestHandler<DeleteProductCommand, bool>
+    public class DeleteProductCommandHandler(AppDbContext db, IProductListCacheInvalidator productListCache)
+        : IRequestHandler<DeleteProductCommand, bool>
     {
         public async Task<bool> Handle(DeleteProductCommand request, CancellationToken cancellationToken)
         {
@@ -15,8 +16,7 @@ namespace MerchantAdmin.API.Application.Commands
             db.Products.Remove(product);
             await db.SaveEntitiesAsync(cancellationToken);
 
-            const string cacheKey = "products:all";
-            await cache.RemoveAsync(cacheKey, cancellationToken);
+            await productListCache.InvalidateAsync(cancellationToken);
 
             return true;
         }

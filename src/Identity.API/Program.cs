@@ -70,12 +70,18 @@ builder.Services.Configure<IdentityOptions>(options =>
     options.User.RequireUniqueEmail = false;
 });
 
-// 4. JWT 认证（统一抽到共享库：签名校验 + SecurityStamp 校验 + 实时角色刷新）
+// 4. JWT 认证（共享库：签名 + 有效期 + 凭证版本号校验，不回查用户库）
+builder.Services.Configure<JwtOptions>(builder.Configuration.GetSection(JwtOptions.SectionName));
 builder.Services.AddAppJwtAuthentication(builder.Configuration);
-builder.Services.AddScoped<ITokenUserProvider, UserManagerTokenUserProvider>();
+// 凭证版本号存 Redis：改密码 / 改角色后自增，资源服务据此在下一个请求上拒绝旧 token
+var redisConnectionString = builder.Configuration["Redis:ConnectionString"];
+builder.Services.AddRedisTokenVersionStore(
+    string.IsNullOrWhiteSpace(redisConnectionString) ? "localhost:6379" : redisConnectionString);
 
-// 6. Token 服务
+// 6. Token 服务：access token 短有效期，登录态由 refresh token 维持
 builder.Services.AddScoped<ITokenService, TokenService>();
+builder.Services.AddScoped<IRefreshTokenService, RefreshTokenService>();
+builder.Services.AddScoped<ICredentialRevoker, CredentialRevoker>();
 
 // 7. 微信小程序认证
 builder.Services.AddHttpClient<WxAuthService>();

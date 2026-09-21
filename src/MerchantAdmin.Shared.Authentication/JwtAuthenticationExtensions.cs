@@ -1,11 +1,16 @@
-
 namespace MerchantAdmin.Shared.Authentication;
 
 /// <summary>
-/// JWT 认证统一配置。
-/// 只负责「校验」：签名校验 + SecurityStamp 校验 + 实时角色刷新。
-/// 用户安全信息（SecurityStamp/角色）通过 <see cref="ITokenUserProvider"/> 抽象获取，
-/// 认证库不直接依赖数据库。签发（签名能力）仍留在身份服务（Identity.API）。
+/// JWT 认证统一配置：签名校验 + 有效期校验 + 凭证版本号校验。
+/// <para>
+/// 这里不做数据库查询，也不调用身份服务。撤销通过 Redis 里的一个版本号完成：
+/// token 里带着签发时的版本号，与 Redis 中的当前值比对，不一致即拒绝。
+/// 单次读取是内存级的，所以不需要本地缓存——也就不会出现"缓存 TTL 就是撤销窗口"的问题。
+/// </para>
+/// <para>
+/// Redis 读不到时放行（fail-open）：失败方向是"撤销暂时失效、退回 access token 的自然过期窗口"，
+/// 而不是"Redis 一抖全站被锁在门外"。
+/// </para>
 /// </summary>
 public static class JwtAuthenticationExtensions
 {
@@ -41,45 +46,39 @@ public static class JwtAuthenticationExtensions
                 },
                 OnTokenValidated = async context =>
                 {
-                    var userId = context.Principal?.FindFirstValue(ClaimTypes.NameIdentifier);
-                    var securityStamp = context.Principal?.FindFirstValue("securityStamp");
-
-                    if (userId is null || !long.TryParse(userId, out var userIdLong))
+                    var userIdValue = context.Principal?.FindFirstValue(ClaimTypes.NameIdentifier);
+                    if (userIdValue is null || !long.TryParse(userIdValue, out var userId))
                     {
                         return;
                     }
 
-                    // 通过抽象接口获取最新安全信息；未注册时仅做签名校验
-                    var provider = context.HttpContext.RequestServices.GetService<ITokenUserProvider>();
-                    if (provider is null)
+                    // 没有 ver 的是本次改造之前签发的 token：跳过校验即可，
+                    // 它们最多再存活一个 access token 周期。
+                    var verValue = context.Principal?.FindFirstValue(AppClaimTypes.TokenVersion);
+                    if (verValue is null || !long.TryParse(verValue, out var tokenVersion))
                     {
                         return;
                     }
 
-                    try
+                    var store = context.HttpContext.RequestServices.GetService<ITokenVersionStore>();
+                    if (store is null)
                     {
-                        var info = await provider.GetAsync(userIdLong);
-                        if (info is null || info.SecurityStamp != securityStamp)
-                        {
-                            context.Fail("安全凭证已变更，请重新登录");
-                            return;
-                        }
-
-                        // 用最新角色替换 token 里固化的旧角色，让 [Authorize(Roles=...)] 使用实时角色
-                        var identity = (ClaimsIdentity)context.Principal!.Identity!;
-                        var staleRoles = identity.FindAll(ClaimTypes.Role).ToList();
-                        foreach (var c in staleRoles)
-                        {
-                            identity.RemoveClaim(c);
-                        }
-                        foreach (var role in info.Roles)
-                        {
-                            identity.AddClaim(new Claim(ClaimTypes.Role, role));
-                        }
+                        return;
                     }
-                    catch
+
+                    var currentVersion = await store.GetAsync(userId, context.HttpContext.RequestAborted);
+                    if (currentVersion is null)
                     {
-                        // 用户信息提供方异常时跳过，避免影响（例如集成测试环境）
+                        // 无撤销信息（或 Redis 不可用）→ 放行
+                        return;
+                    }
+
+                    if (currentVersion.Value != tokenVersion)
+                    {
+                        // 改密码 / 改角色 / 删账号后，该用户所有已签发的 token 在这一刻失效。
+                        // 客户端收到 401 会自动续期：改密码时续期会被拒（被踢下线），
+                        // 改角色时续期会拿到新角色（无感换权）。
+                        context.Fail("凭证已失效");
                     }
                 }
             };

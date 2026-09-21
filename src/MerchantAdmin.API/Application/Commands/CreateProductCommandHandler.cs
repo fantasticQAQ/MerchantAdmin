@@ -3,7 +3,8 @@ using MerchantAdmin.Domain.Entities.AggregatesModel;
 
 namespace MerchantAdmin.API.Application.Commands
 {
-    public class CreateProductCommandHandler(AppDbContext db, ICacheService cache) : IRequestHandler<CreateProductCommand, int>
+    public class CreateProductCommandHandler(AppDbContext db, IProductListCacheInvalidator productListCache)
+        : IRequestHandler<CreateProductCommand, int>
     {
         public async Task<int> Handle(CreateProductCommand request, CancellationToken cancellationToken)
         {
@@ -11,8 +12,7 @@ namespace MerchantAdmin.API.Application.Commands
             db.Products.Add(product);
             await db.SaveEntitiesAsync(cancellationToken);
 
-            const string cacheKey = "products:all";
-            await cache.RemoveAsync(cacheKey, cancellationToken);
+            await productListCache.InvalidateAsync(cancellationToken);
 
             return product.Id;
         }

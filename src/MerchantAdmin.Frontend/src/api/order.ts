@@ -1,4 +1,4 @@
-import request from '@/utils/request'
+import request, { newRequestId } from '@/utils/request'
 import type { PagedResult } from './product'
 
 export interface OrderItemDto {
@@ -31,24 +31,35 @@ export function getOrders(params?: OrderQueryParams) {
   return request.get<PagedResult<OrderDto>>('/merchant/orders', { params })
 }
 
-/** 创建订单（支持多商品） */
-export function createOrder(data: CreateOrderParams) {
-  return request.post<number>('/merchant/orders/create', data)
+/**
+ * 创建订单（支持多商品）
+ * 带 x-requestid 幂等键：超时重发时服务端只下一次单，不会重复扣库存
+ */
+export function createOrder(data: CreateOrderParams, requestId = newRequestId()) {
+  return request.post<number>('/merchant/orders/create', data, {
+    headers: { 'x-requestid': requestId }
+  })
 }
 
 /** 取消订单 */
-export function cancelOrder(id: number) {
-  return request.post<boolean>(`/merchant/orders/${id}/cancel`)
+export function cancelOrder(id: number, requestId = newRequestId()) {
+  return request.post<boolean>(`/merchant/orders/${id}/cancel`, undefined, {
+    headers: { 'x-requestid': requestId }
+  })
 }
 
 /** 支付订单 */
-export function payOrder(id: number) {
-  return request.post<number>(`/merchant/orders/${id}/pay`)
+export function payOrder(id: number, requestId = newRequestId()) {
+  return request.post<number>(`/merchant/orders/${id}/pay`, undefined, {
+    headers: { 'x-requestid': requestId }
+  })
 }
 
 /** 退款（仅已支付订单） */
-export function refundOrder(id: number) {
-  return request.post<boolean>(`/merchant/orders/${id}/refund`)
+export function refundOrder(id: number, requestId = newRequestId()) {
+  return request.post<boolean>(`/merchant/orders/${id}/refund`, undefined, {
+    headers: { 'x-requestid': requestId }
+  })
 }
 
 /** 删除订单（仅已取消订单） */

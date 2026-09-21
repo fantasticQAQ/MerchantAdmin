@@ -16,8 +16,12 @@ builder.Services.AddSingleton<IPaymentSessionStore, InMemoryPaymentSessionStore>
 
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
+// 供 docker-compose 的 healthcheck 探活（nginx 依赖 payment-api 先健康再启动）
+builder.Services.AddHealthChecks();
 
 var app = builder.Build();
+
+app.MapHealthChecks("/health").AllowAnonymous();
 
 app.MapControllers();
 

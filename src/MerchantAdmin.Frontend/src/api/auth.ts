@@ -6,9 +6,10 @@ export interface LoginParams {
   password: string
 }
 
-/** 登录结果（Identity.API 返回 { token, userName, roles }） */
+/** 登录/刷新结果（Identity.API 返回 { token, refreshToken, userName, roles }） */
 export interface LoginResult {
   token: string
+  refreshToken: string
   userName: string
   roles: string[]
 }

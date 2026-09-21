@@ -1,5 +1,6 @@
 using System.Security.Claims;
 using System.Text.Json;
+using MerchantAdmin.API.Application.Commands;
 using MerchantAdmin.Domain.Entities;
 
 namespace MerchantAdmin.API.Application.Behaviors
@@ -31,6 +32,14 @@ namespace MerchantAdmin.API.Application.Behaviors
 
             // 只记录写操作（Command），跳过查询
             if (typeof(TRequest).Name.EndsWith("Query"))
+            {
+                return response;
+            }
+
+            // IdentifiedCommand 只是幂等包装、不是真实业务命令：
+            // 日志由内层命令自己的管道记录，这里跳过，避免一次操作写两条。
+            if (typeof(TRequest).IsGenericType &&
+                typeof(TRequest).GetGenericTypeDefinition() == typeof(IdentifiedCommand<,>))
             {
                 return response;
             }

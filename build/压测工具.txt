@@ -1,0 +1,64 @@
+eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIyIiwidW5pcXVlX25hbWUiOiJmYW50YXN0aWMiLCJzZWN1cml0eVN0YW1wIjoiMk5BSUIzU0wyQVgzSVJOT1lIUFkyV0dIWEVMM05HVloiLCJodHRwOi8vc2NoZW1hcy5taWNyb3NvZnQuY29tL3dzLzIwMDgvMDYvaWRlbnRpdHkvY2xhaW1zL3JvbGUiOiJBZG1pbiIsImV4cCI6MTc4OTg0MzE0NywiaXNzIjoiaHR0cDovL2xvY2FsaG9zdDo1MDAxIn0.6HRHW9voYcDTY3YtE5sCnNkJzHITgo8qeiO5WJaJPiA
+
+Add-Type -AssemblyName System.Net.Http;
+$token='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIyIiwidW5pcXVlX25hbWUiOiJmYW50YXN0aWMiLCJzZWN1cml0eVN0YW1wIjoiMk5BSUIzU0wyQVgzSVJOT1lIUFkyV0dIWEVMM05HVloiLCJodHRwOi8vc2NoZW1hcy5taWNyb3NvZnQuY29tL3dzLzIwMDgvMDYvaWRlbnRpdHkvY2xhaW1zL3JvbGUiOiJBZG1pbiIsImV4cCI6MTc4OTg0Njk0NCwiaXNzIjoiaHR0cDovL2xvY2FsaG9zdDo1MDAxIn0.uFn1fhxJioLZqaEnjXbivxyoyGuqWdK5D62Q-UdeASY';
+$url='http://localhost:8080/api/merchant/products/1066';
+$count=200;
+[System.Net.ServicePointManager]::DefaultConnectionLimit=$count;
+$client=[System.Net.Http.HttpClient]::new();
+$client.DefaultRequestHeaders.Authorization=[System.Net.Http.Headers.AuthenticationHeaderValue]::new('Bearer',$token);
+$tasks=1..$count | ForEach-Object { $req=[System.Net.Http.HttpRequestMessage]::new('PUT',$url);
+$req.Headers.Add('x-requestid',[guid]::NewGuid().ToString());
+$req.Content=[System.Net.Http.StringContent]::new('{"stockDelta":-1}',[System.Text.Encoding]::UTF8,'application/json');
+$client.SendAsync($req) };
+[System.Threading.Tasks.Task]::WaitAll([System.Threading.Tasks.Task[]]$tasks);
+$tasks | Group-Object { [int]$_.Result.StatusCode } | Select-Object Count,Name; Write-Host '--- 响应体 ---';
+$tasks[0].Result.Content.ReadAsStringAsync().Result
+
+
+
+bombardier压测 有点问题：
+$token = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIyIiwidW5pcXVlX25hbWUiOiJmYW50YXN0aWMiLCJzZWN1cml0eVN0YW1wIjoiMk5BSUIzU0wyQVgzSVJOT1lIUFkyV0dIWEVMM05HVloiLCJodHRwOi8vc2NoZW1hcy5taWNyb3NvZnQuY29tL3dzLzIwMDgvMDYvaWRlbnRpdHkvY2xhaW1zL3JvbGUiOiJBZG1pbiIsImV4cCI6MTc4OTg0MzE0NywiaXNzIjoiaHR0cDovL2xvY2FsaG9zdDo1MDAxIn0.6HRHW9voYcDTY3YtE5sCnNkJzHITgo8qeiO5WJaJPiA"
+$rid   = [guid]::NewGuid().ToString()
+Set-Content "$env:TEMP\body.json" -Value '{"stockDelta":-1}' -NoNewline -Encoding ascii
+
+& "F:\DownLoad\bombardier.exe" -c 100 -n 100 -m PUT -f "$env:TEMP\body.json" `
+  -H "Authorization: Bearer $token" -H "x-requestid: $rid" `
+  http://localhost:8080/api/merchant/products/1066
+
+
+第二步：直接命令行跑
+
+PowerShell
+
+# 看所有参数
+& "F:\DownLoad\bombardier.exe" --help
+
+# ① 缓存命中压测：200 并发、共 1 万请求
+& "F:\DownLoad\bombardier.exe" -c 200 -n 10000 http://localhost:5038/api/products/50000
+
+# ② 持续压 30 秒，并输出延迟分布（-l 很关键，能看到 P50/P90/P99）
+& "F:\DownLoad\bombardier.exe" -c 500 -d 30s -l http://localhost:5038/api/products/50000
+
+# ③ 扣库存（POST + JSON body），验证分布式锁
+& "F:\DownLoad\bombardier.exe" -c 300 -n 300 -m POST -H "Content-Type: application/json" -b '{"quantity":1}' http://localhost:5038/api/products/1/deduct-stock
+常用参数速查
+参数	含义
+-c	并发连接数（connections）
+-n	总请求数
+-d 30s	持续时间（也可 1m）
+-l	打印延迟百分位/直方图
+-m POST	HTTP 方法
+-H "k: v"	加请求头
+-b '...'	请求体（body）
+看懂输出
+-l 会打出类似这样的分布：
+
+
+Plain Text
+
+Latency Distribution
+  50%  1.2ms
+  75%  2.8ms
+  90%  5.1ms
+  99%  18.7ms

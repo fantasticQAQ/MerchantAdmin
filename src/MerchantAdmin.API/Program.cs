@@ -1,24 +1,29 @@
-using MerchantAdmin.Shared.EventBus.RabbitMQ;
-using MerchantAdmin.Shared.IntegrationEventLog.Services;
-using MerchantAdmin.API.Middlewares;
 using MerchantAdmin.API;
-using MerchantAdmin.Application;
-using MerchantAdmin.Application.Services;
-using MerchantAdmin.Shared.Authentication;
-using Microsoft.OpenApi.Models;
-using Serilog;
-using MerchantAdmin.API.Application.Commands;
 using MerchantAdmin.API.Application.Behaviors;
+using MerchantAdmin.API.Application.Commands;
 using MerchantAdmin.API.Application.IntegrationEvents;
 using MerchantAdmin.API.Application.IntegrationEvents.EventHandling;
+using MerchantAdmin.API.Application.Services;
 using MerchantAdmin.API.Infrastructure.Caching;
+using MerchantAdmin.API.Middlewares;
+using MerchantAdmin.Application;
+using MerchantAdmin.Application.Services;
+using MerchantAdmin.Domain.Entities.AggregatesModel;
+using MerchantAdmin.Infrastructure.Idempotency;
+using MerchantAdmin.Infrastructure.Services;
+using MerchantAdmin.Shared.Authentication;
+using MerchantAdmin.Shared.EventBus.RabbitMQ;
+using MerchantAdmin.Shared.IntegrationEventLog.Services;
+using Microsoft.OpenApi.Models;
+using Serilog;
+using StackExchange.Redis;
 
 var builder = WebApplication.CreateBuilder(args);
 var services = builder.Services;
 
 // ===== 添加 CORS（限制允许的域名，生产按配置收紧）=====
 var allowedOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>() ?? [];
-builder.Services.AddCors(options =>
+services.AddCors(options =>
 {
     options.AddPolicy("AllowFrontend", policy =>
     {
@@ -33,12 +38,23 @@ builder.Host.UseSerilog((ctx, cfg) =>
     cfg.ReadFrom.Configuration(ctx.Configuration);
 });
 
+services.AddScoped<IProductStockService, ProductStockService>();
+services.AddScoped<IProductListCacheInvalidator, RedisProductListCacheInvalidator>();
+// 幂等请求管理器（基于 ClientRequests 表，与业务写入同事务）
+services.AddScoped<IRequestManager, RequestManager>();
+// 库存回补服务（退货/取消订单把预占库存退回货架），具体类需显式注册
+services.AddScoped<OrderInventoryReturnService>();
+
 services.AddMediatR(cfg =>
 {
     cfg.RegisterServicesFromAssembly(typeof(CancelOrderCommand).Assembly);
     cfg.AddOpenBehavior(typeof(LoggingBehavior<,>));
     cfg.AddOpenBehavior(typeof(ValidatorBehavior<,>));
     cfg.AddOpenBehavior(typeof(TransactionBehavior<,>));
+    // OperationLogBehavior 排在 TransactionBehavior 之后（内层）：日志与业务写入同属一个事务。
+    // 注意：只把它调到前面并不能让日志落到事务外——扣库存走 IdentifiedCommand<T>（幂等包装）→
+    // 内层 T 的嵌套 Send，内层 TransactionBehavior 因 HasActiveTransaction 直接穿透，真实事务由
+    // 外层持有并在整个内层链返回后才 Commit。要把日志挪出事务得改层次，不是改注册顺序。
     cfg.AddOpenBehavior(typeof(OperationLogBehavior<,>));
 });
 
@@ -63,14 +79,21 @@ services.AddTransient<IOrderingIntegrationEventService, OrderingIntegrationEvent
 //    options.Configuration =
 //        builder.Configuration["Redis:ConnectionString"];
 //});
-builder.Services.AddSingleton<IRedisConnectionProvider, RedisConnectionProvider>();
-builder.Services.AddScoped<ICacheService, RedisCacheService>();
-builder.Services.AddScoped<IDelayJobService, RedisDelayJobService>();
+
+
+services.AddSingleton<IRedisConnectionProvider, RedisConnectionProvider>();
+services.AddScoped<ICacheService, RedisCacheService>();
+services.AddScoped<IDelayJobService, RedisDelayJobService>();
+
+// 凭证版本号校验复用上面那条 Redis 连接，不额外建连接。
+// token 里的 ver 与 Redis 中的当前值不一致 → 401，客户端续期后可无感换权（改角色）或被踢下线（改密码）。
+services.AddSingleton<IConnectionMultiplexer>(sp => sp.GetRequiredService<IRedisConnectionProvider>().Connection);
+services.AddRedisTokenVersionStore();
 
 // 组合缓存框架：分布式锁 + 布隆过滤器 + 延时双删
-builder.Services.AddSingleton<IDistributedLock, RedisDistributedLock>();
-builder.Services.AddSingleton<IBloomFilter, RedisBloomFilter>();
-builder.Services.AddSingleton<ICacheAsideService, CacheAsideService>();
+services.AddSingleton<IDistributedLock, RedisDistributedLock>();
+services.AddSingleton<IBloomFilter, RedisBloomFilter>();
+services.AddSingleton<ICacheAsideService, CacheAsideService>();
 
 //// 注册策略
 //services.AddAuthorization(options =>
@@ -82,9 +105,9 @@ builder.Services.AddSingleton<ICacheAsideService, CacheAsideService>();
 //[Authorize(Policy = "AtLeast18")]
 
 // 1. 控制器 + Swagger
-builder.Services.AddControllers();
-builder.Services.AddEndpointsApiExplorer();
-builder.Services.AddSwaggerGen(opt =>
+services.AddControllers();
+services.AddEndpointsApiExplorer();
+services.AddSwaggerGen(opt =>
 {
     opt.SwaggerDoc("v1", new OpenApiInfo { Title = "MerchantAdmin.Api", Version = "v3" });
 
@@ -117,36 +140,33 @@ builder.Services.AddSwaggerGen(opt =>
 });
 
 // 2. 数据库上下文
-builder.Services.AddDbContext<AppDbContext>((sp, options) =>
+services.AddDbContext<AppDbContext>((sp, options) =>
 {
     options.UseSqlServer(
         builder.Configuration.GetConnectionString("Default"));
 });
 
 
-// 4. JWT 认证（统一抽到共享库：签名校验 + SecurityStamp 校验 + 实时角色刷新）
-builder.Services.AddAppJwtAuthentication(builder.Configuration);
-// 通过内部 HTTP 接口向 Identity 服务获取用户安全信息（两个服务数据库已拆分）
-builder.Services.AddHttpClient("Identity", client =>
-{
-    client.BaseAddress = new Uri(builder.Configuration["InternalApi:BaseUrl"]!);
-});
-builder.Services.AddScoped<ITokenUserProvider, HttpTokenUserProvider>();
+// 4. JWT 认证（共享库：只做签名与有效期校验）
+// 用户安全信息与实时角色不在这里查询，判断集中在 Identity 的 /auth/refresh，
+// 详见 JwtAuthenticationExtensions 的说明。
+services.AddAppJwtAuthentication(builder.Configuration);
 
-builder.Services.AddHealthChecks();
+services.AddHealthChecks();
 
 var app = builder.Build();
 
 app.MapHealthChecks("/health").AllowAnonymous();
 
 //多个 Pod 同时启动时可能并发迁移（SQL Server 会锁表，一般不会炸，但会报错）所以放部署文件中
-//using (var scope = app.Services.CreateScope())
+//using (var scope = app.services.CreateScope())
 //{
 //    var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
 //    db.Database.Migrate();
 //}
 
-// 7. Swagger（仅开发环境启用，生产关闭避免泄露接口）
+// 7. Swagger（仅开发环境启用，生产关闭避免泄露接口）System.AggregateException:“Some services are not able to be constructed (Error while validating the service descriptor 'ServiceType: MediatR.IRequestHandler`2[MerchantAdmin.API.Application.Commands.RefundOrderCommand,System.Boolean] Lifetime: Transient ImplementationType: MerchantAdmin.API.Application.Commands.RefundOrderCommandHandler': Unable to resolve service for type 'MerchantAdmin.API.Application.Services.OrderInventoryReturnService' while attempting to activate 'MerchantAdmin.API.Application.Commands.RefundOrderCommandHandler'.) (Error while validating the service descriptor 'ServiceType: MediatR.INotificationHandler`1[MerchantAdmin.Domain.Events.OrderCancelledDomainEvent] Lifetime: Transient ImplementationType: MerchantAdmin.API.Application.DomainEventHandlers.OrderCancelledDomainEventHandler': Unable to resolve service for type 'MerchantAdmin.API.Application.Services.OrderInventoryReturnService' while attempting to activate 'MerchantAdmin.API.Application.DomainEventHandlers.OrderCancelledDomainEventHandler'.) (Error while validating the service descriptor 'ServiceType: MediatR.INotificationHandler`1[MerchantAdmin.Domain.Events.OrderTimedOutDomainEvent] Lifetime: Transient ImplementationType: MerchantAdmin.API.Application.DomainEventHandlers.OrderCancelledDomainEventHandler': Unable to resolve service for type 'MerchantAdmin.API.Application.Services.OrderInventoryReturnService' while attempting to activate 'MerchantAdmin.API.Application.DomainEventHandlers.OrderCancelledDomainEventHandler'.)”
+
 if (app.Environment.IsDevelopment())
 {
     app.UseDeveloperExceptionPage();

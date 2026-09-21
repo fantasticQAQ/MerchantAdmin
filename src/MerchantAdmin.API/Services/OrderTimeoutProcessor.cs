@@ -4,7 +4,7 @@ namespace MerchantAdmin.Application.Services;
 
 /// <summary>
 /// 订单超时关闭处理器（过期事件与兜底扫描共用）：
-/// 将订单标记为 TimedOut、回补库存，支付处理中订单通知支付网关终止在途支付。
+/// 将订单标记为 TimedOut。待支付订单回补库存；支付处理中只关单并通知网关终止支付，库存等支付失败事件再回补。
 /// </summary>
 public class OrderTimeoutProcessor(AppDbContext db, IOrderingIntegrationEventService orderingIntegrationEventService, ILogger<OrderTimeoutProcessor> logger)
 {

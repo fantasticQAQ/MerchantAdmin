@@ -27,6 +27,14 @@ RUN dotnet publish -c Release -o /app/publish
 
 # ========== 第二阶段：运行 ==========
 FROM mcr.microsoft.com/dotnet/aspnet:8.0
+
+# aspnet 运行镜像里没有 curl，而 docker-compose 的 healthcheck 要用它探活，
+# 缺了会让容器永远停在 unhealthy（进而让依赖它的服务起不来）。
+# 放在 COPY 之前：业务代码改动不会使这一层缓存失效。
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends curl \
+    && rm -rf /var/lib/apt/lists/*
+
 WORKDIR /app
 COPY --from=build /app/publish .
 ENTRYPOINT ["dotnet", "MerchantAdmin.API.dll"]
